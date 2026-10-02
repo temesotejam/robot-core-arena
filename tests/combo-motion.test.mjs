@@ -49,3 +49,6 @@ test('振りかぶりと戻しでは命中せず、振る区間で一度だけ�
  const b=battle('rapier'),u=b.human,v=b.entities[1];v.x=u.x+.8;v.z=u.z;u.target=v.id;assert(b.attack(u));const initial=v.lp;
  b.meleeStep(u,u.attack.duration*.1);assert.equal(v.lp,initial);b.meleeStep(u,u.attack.duration*.15);assert(v.lp<initial);const after=v.lp;b.meleeStep(u,u.attack.duration*.5);assert.equal(v.lp,after);
 });
+test('先行入力の受付端でも次のフレームに繰り越して確実に実行する',()=>{
+ const b=battle(),u=b.human;tap(b);u.attack.elapsed=u.attack.duration-.20;b.runtime(u).cooldown=.22;u.actionTime=0;u.lastAttackHeld=true;u.charging=true;u.charge=0;b.consumeEvents();b.handleInput(u,{},1/60);assert(u.queuedAttack);advance(b,.24);assert.equal(u.combo,1);assert.equal(b.consumeEvents().filter(e=>e.type==='attack').length,1);
+});
