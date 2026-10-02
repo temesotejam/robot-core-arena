@@ -1,8 +1,9 @@
+import {defaultBindings,validateBindings} from './bindings.js';
 import {VERSION,CATALOG,PARTS,WEAPONS,PASSIVES,SPECIALS,STAGES,DIFFICULTIES,STYLES} from './data.js';
 import {defaultConfig,clone} from './customize.js';
 import {connected,findPlacement,REGIONS} from './grid.js';
 const KEY='robot-core-arena.save.v1';
-export function freshSave(){return {version:VERSION,inventory:[],units:[0,1,2].map(i=>defaultConfig(i)),enemies:[0,1,2].map(i=>defaultConfig(i,true)),presets:[],teamPresets:[],battlePresets:[],setup:{allies:1,enemies:1,player:0,stage:'yard',duration:180,coordination:'spread',training:false},settings:{quality:'high',sensitivity:1,damageNumbers:true},records:{battles:0,wins:0,kills:0},lastResult:null};}
+export function freshSave(){return {version:VERSION,inventory:[],units:[0,1,2].map(i=>defaultConfig(i)),enemies:[0,1,2].map(i=>defaultConfig(i,true)),presets:[],teamPresets:[],battlePresets:[],setup:{allies:1,enemies:1,player:0,stage:'yard',duration:180,coordination:'spread',training:false},settings:{quality:'high',sensitivity:1,damageNumbers:true,bindings:defaultBindings()},records:{battles:0,wins:0,kills:0},lastResult:null};}
 export function validateSave(value){
  if(!value||value.version!==VERSION)throw Error('このバックアップの形式には対応していません');
  if(!Array.isArray(value.inventory)||!Array.isArray(value.units)||value.units.length!==3||!Array.isArray(value.enemies)||value.enemies.length!==3)throw Error('保存データの構成が不正です');
@@ -11,6 +12,7 @@ export function validateSave(value){
  const checkConfig=c=>{if(!c||typeof c.name!=='string'||!c.armor||!Array.isArray(c.sets)||c.sets.length!==2||!Array.isArray(c.placements)||!Array.isArray(c.passives)||c.passives.length>5||c.passives.some(x=>!PASSIVES[x])||!Array.isArray(c.abilities)||c.abilities.some(x=>!SPECIALS[x])||!STYLES[c.style]||!DIFFICULTIES[c.difficulty])throw Error('機体データが不正です');for(const part of PARTS)if(lookup(c.armor[part])?.part!==part)throw Error('装甲が見つかりません');for(const set of c.sets)if(lookup(set.item)?.category!=='weapon'||set.shield&&lookup(set.shield)?.category!=='shield')throw Error('武器が見つかりません');for(const p of c.placements)if(!p||!lookup(p.item)?.shape||!REGIONS[p.region]||typeof p.uid!=='string'||!Number.isInteger(p.x)||!Number.isInteger(p.y)||!Number.isInteger(p.rotation))throw Error('配置データが不正です');};
  value.units.forEach(checkConfig);value.enemies.forEach(checkConfig);if(value.validUnits){if(!Array.isArray(value.validUnits)||value.validUnits.length!==3)throw Error('有効構成の保存が不正です');value.validUnits.forEach(checkConfig);}if(!value.settings||!['high','low'].includes(value.settings.quality)||!Number.isFinite(value.settings.sensitivity)||value.settings.sensitivity<=0||!value.records||['battles','wins','kills'].some(k=>!Number.isSafeInteger(value.records[k])||value.records[k]<0))throw Error('設定・記録が不正です');if(!value.setup||![1,2,3].includes(value.setup.allies)||![1,2,3].includes(value.setup.enemies)||!STAGES[value.setup.stage]||![0,1,2].includes(value.setup.player)||![0,180,300].includes(value.setup.duration))throw Error('戦闘条件が不正です');
  for(const list of ['presets','teamPresets','battlePresets'])if(!Array.isArray(value[list]))throw Error('構成一覧が不正です');value.presets.forEach(p=>checkConfig(p.config));value.teamPresets.forEach(p=>{if(!Array.isArray(p.units)||p.units.length!==3)throw Error('編成が不正です');p.units.forEach(checkConfig);});value.battlePresets.forEach(p=>{if(!Array.isArray(p.units)||!Array.isArray(p.enemies))throw Error('戦闘保存が不正です');p.units.forEach(checkConfig);p.enemies.forEach(checkConfig);});
+ value.settings.bindings=validateBindings(value.settings.bindings);
  return value;
 }
 export class SaveStore{
