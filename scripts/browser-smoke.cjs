@@ -1,0 +1,20 @@
+const {chromium}=require('playwright');
+const {spawn}=require('node:child_process');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+(async()=>{const server=spawn(process.execPath,['scripts/serve.mjs'],{stdio:'inherit'});let browser;
+try{for(let i=0;i<100;i++){try{if((await fetch('http://127.0.0.1:4173')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
+browser=await chromium.launch({headless:true,args:['--no-sandbox','--enable-unsafe-swiftshader']});
+const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+await page.goto('http://127.0.0.1:4173');await page.locator('.home-copy').waitFor();fs.mkdirSync('artifacts',{recursive:true});await page.screenshot({path:'artifacts/home.png'});
+await page.locator('.nav [data-view="custom"]').click();await page.locator('[data-action="customTab"][data-id="core"]').click();assert.equal(await page.locator('[data-cell]').count(),94);await page.locator('[data-action="autoPack"]').click();await page.screenshot({path:'artifacts/core.png'});
+for(const tab of ['passives','abilities','armor'])await page.locator(`[data-action="customTab"][data-id="${tab}"]`).click();
+await page.locator('.nav [data-view="setup"]').click();await page.locator('[data-field="allies"]').selectOption('3');await page.locator('[data-field="enemies"]').selectOption('3');await page.locator('[data-action="startBattle"]').click();await page.locator('.hud-resources').waitFor();await page.waitForTimeout(500);
+await page.evaluate(async()=>{const {app}=await import('/src/main.js');if(app.battle.entities.length!==6)throw Error('3v3 failed');app.battle.countdown=0;});
+await page.keyboard.down('KeyW');await page.waitForTimeout(500);await page.keyboard.up('KeyW');await page.keyboard.press('Space');await page.waitForTimeout(200);await page.keyboard.press('Tab');await page.keyboard.press('KeyQ');await page.waitForTimeout(500);await page.screenshot({path:'artifacts/battle.png'});
+await page.keyboard.press('Escape');await page.locator('.modal-card').waitFor();const before=await page.evaluate(async()=> (await import('/src/main.js')).app.battle.time);await page.waitForTimeout(250);assert.equal(await page.evaluate(async()=> (await import('/src/main.js')).app.battle.time),before);await page.locator('[data-action="closeModal"]').click();
+await page.evaluate(async()=>{const {app}=await import('/src/main.js');for(const u of app.battle.entities.filter(u=>u.team)){u.dead=true;u.lp=0;}app.battle.checkEnd();});await page.locator('.result-top').waitFor();assert.equal(await page.evaluate(async()=> (await import('/src/main.js')).app.state.inventory.reduce((n,e)=>n+e.count,0)),88);await page.screenshot({path:'artifacts/result.png'});
+await page.reload();await page.locator('.home-copy').waitFor();assert.equal(await page.evaluate(async()=> (await import('/src/main.js')).app.state.records.wins),1);
+await page.setViewportSize({width:390,height:844});await page.screenshot({path:'artifacts/mobile-home.png'});await page.locator('.nav [data-view="custom"]').click();await page.locator('[data-action="customTab"][data-id="core"]').click();await page.screenshot({path:'artifacts/mobile-core.png'});
+assert.deepEqual(errors,[]);console.log('Browser smoke passed: WebGL, screens, 94 cells, 3v3, movement, pause, 88 rewards, persistent reload and mobile layout.');
+}catch(e){console.error(e);process.exitCode=1;}finally{await browser?.close();server.kill();}})();
