@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 import {FRAMES,WEAPONS} from './data.js';
-import {sampleMotion,readyPose,motionRhythm} from './motion.js';
+import {sampleMotion,readyPose,motionRhythm,stepPhase} from './motion.js';
 import {swordArm} from './sword-motion.js';
 const mats=new Map(),boxes=new Map(),armorGeometries=new Map(),plateGeometries=new Map();
 function material(color,emissive=false){const key=`${color}:${emissive}`;if(!mats.has(key))mats.set(key,new THREE.MeshStandardMaterial({color,metalness:emissive?.15:.55,roughness:emissive?.25:.42,emissive:emissive?color:'#000000',emissiveIntensity:emissive?1.6:0}));return mats.get(key);}
@@ -99,9 +99,9 @@ function updateTrails(ref,u,time,motionName){
  ref.root.updateMatrixWorld(true);
  for(const trail of ref.weaponTrails||[]){const p=attack?attack.elapsed/attack.duration:0,rhythm=motionRhythm(ref.kind,attack||{}),left=trail.weapon.parent===ref.arms[1].hand;
   const striking=ref.kind==='knuckle'?left===['jabLeft','bodyLeft'].includes(motionName):ref.kind==='dualSword'&&['rightCut','leftReturn','rightDiagonal','leftDiagonal'].includes(motionName)?left===['leftReturn','leftDiagonal'].includes(motionName):true;
-  if(active&&striking&&p>=rhythm.windup&&p<=rhythm.contactEnd+.08&&trail.samples.at(-1)?.time!==time){const tip=ref.root.worldToLocal(trail.weapon.localToWorld(new THREE.Vector3(...trail.weapon.userData.trailTip))),base=ref.root.worldToLocal(trail.weapon.localToWorld(new THREE.Vector3(...trail.weapon.userData.trailBase)));trail.samples.push({tip,base,time});}
+  if(active&&striking&&p>=rhythm.windup&&p<=rhythm.contactEnd+.08&&trail.samples.at(-1)?.time!==time){const world=ref.kind==='sword'&&attack.charge>0&&!attack.skill,tip=trail.weapon.localToWorld(new THREE.Vector3(...trail.weapon.userData.trailTip)),base=trail.weapon.localToWorld(new THREE.Vector3(...trail.weapon.userData.trailBase));if(!world){ref.root.worldToLocal(tip);ref.root.worldToLocal(base);}trail.samples.push({tip,base,time,world});}
   trail.samples=trail.samples.filter(s=>time-s.time<.12).slice(-12);const vertices=trail.mesh.geometry.attributes.position.array;let offset=0;
-  for(let i=1;i<trail.samples.length;i++){const a=trail.samples[i-1],b=trail.samples[i];for(const v of [a.base,a.tip,b.tip,a.base,b.tip,b.base]){vertices[offset++]=v.x;vertices[offset++]=v.y;vertices[offset++]=v.z;}}
+  for(let i=1;i<trail.samples.length;i++){const a=trail.samples[i-1],b=trail.samples[i],point=(s,key)=>s.world?ref.root.worldToLocal(s[key].clone()):s[key],ab=point(a,'base'),at=point(a,'tip'),bb=point(b,'base'),bt=point(b,'tip');for(const v of [ab,at,bt,ab,bt,bb]){vertices[offset++]=v.x;vertices[offset++]=v.y;vertices[offset++]=v.z;}}
   trail.mesh.geometry.attributes.position.needsUpdate=true;trail.mesh.geometry.setDrawRange(0,offset/3);trail.mesh.visible=offset>0;
  }
 }
@@ -173,7 +173,7 @@ export class ArenaRenderer{
   const motion=poseWeapons(ref,u,time),canPose=!u.dead&&!(u.down>0),attack=u.attack||u.motion;
   // The visible cutting plane follows the same committed yaw as the hit arc.
   // Turn back toward a moving lock target smoothly during recovery.
-  let facing=u.yaw;if(canPose&&motion.sword&&motion.plantYaw!==undefined){const p=attack.elapsed/attack.duration,t=THREE.MathUtils.smoothstep(p,.53,1);facing=motion.plantYaw+Math.atan2(Math.sin(u.yaw-motion.plantYaw),Math.cos(u.yaw-motion.plantYaw))*t;}ref.root.rotation.y=facing;
+  let facing=u.yaw;if(canPose&&motion.sword&&motion.plantYaw!==undefined){const p=attack.elapsed/attack.duration,t=THREE.MathUtils.smoothstep(p,motion.spinYaw!==undefined?.78:.53,1);facing=motion.plantYaw+Math.atan2(Math.sin(u.yaw-motion.plantYaw),Math.cos(u.yaw-motion.plantYaw))*t;}facing+=motion.spinYaw||0;ref.root.rotation.y=facing;
   const reaction=u.hitReaction,reactionWeight=reaction?Math.sin(Math.PI*Math.min(1,reaction.elapsed/reaction.duration)):0,relative=reaction?(reaction.yaw-facing):0;
   ref.bodyPivot.rotation.set(u.dead?Math.PI/3:u.down>0?.9:motion.body[0]+(u.dashTime>0?.13:0)+Math.cos(relative)*(reaction?.strength||0)*reactionWeight,canPose?motion.body[1]:0,u.dead?.8:u.status==='stun'?Math.sin(time*30)*.03:canPose?motion.body[2]-Math.sin(relative)*(reaction?.strength||0)*reactionWeight:0);
   const drop=canPose?motion.drop:0,shift=canPose?motion.shift:[0,0];ref.bodyPivot.position.set(shift[0],.36+drop,shift[1]);ref.legGroup.position.set(shift[0]*.5,motion.sword&&ref.legFrame==='panzer'?0:drop,shift[1]*.6);const hipYaw=canPose&&ref.legFrame!=='panzer'?motion.hipYaw:0;ref.legGroup.rotation.y=hipYaw;
@@ -181,7 +181,7 @@ export class ArenaRenderer{
    const foot=new THREE.Vector3(...motion.feet[i]);
    if(canPose&&u.grounded&&motion.plantOrigin&&!u.guard){
     const travel=new THREE.Vector3(u.x-motion.plantOrigin[0],0,u.z-motion.plantOrigin[2]).applyAxisAngle(new THREE.Vector3(0,1,0),-(motion.plantYaw??facing));
-    const a=u.attack||u.motion,r=motionRhythm('sword',a),p=Math.min(1,a.elapsed/a.duration),t=Math.max(0,Math.min(1,(p-r.windup*.5)/(r.contactEnd-r.windup*.5))),phase=t*t*(3-2*t),distance=Math.min(r.advance,Math.max(0,travel.z)/Math.max(.001,phase));
+    const a=u.attack||u.motion,r=motionRhythm('sword',a),p=Math.min(1,a.elapsed/a.duration),t=Math.max(0,Math.min(1,(p-r.windup*.5)/(r.contactEnd-r.windup*.5))),phase=a.weapon==='sword'&&a.charge>0&&!a.skill?stepPhase(a):t*t*(3-2*t),distance=Math.min(r.advance,Math.max(0,travel.z)/Math.max(.001,phase));
     foot.z+=distance*motion.footStride[i];foot.sub(travel).applyAxisAngle(new THREE.Vector3(0,1,0),(motion.plantYaw??facing)-facing);
    }
    if(!canPose)foot.set(leg.userData.side*.105,.035,.045);

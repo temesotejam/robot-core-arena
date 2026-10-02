@@ -39,9 +39,9 @@ function draw(){
  // The fixed, translucent training target makes blade entry visible. The
  // camera frames both robots; the stationary floor and shadows make
  // grounded feet and any sliding visible, rather than hiding root movement.
- const mobile=innerWidth<600,charged=selected===4,height=charged?.40:mobile?.42:.64,zoom=distance*(charged?(mobile?1.95:1.20):mobile?1.30:1),focusZ=withTarget?(u.z+.9)/2:u.z;renderer.camera.position.set(u.x+Math.sin(yaw)*Math.cos(pitch)*zoom,u.y+height+Math.sin(pitch)*zoom,focusZ+Math.cos(yaw)*Math.cos(pitch)*zoom);renderer.camera.lookAt(u.x,u.y+height,focusZ);renderer.renderer.render(renderer.scene,renderer.camera);
+ const mobile=innerWidth<600,charged=selected===4,height=charged?.40:mobile?.42:.64,zoom=distance*(charged?(mobile?1.95:1.20):mobile?1.30:1),focusZ=withTarget&&!charged?(u.z+.9)/2:u.z;renderer.camera.position.set(u.x+Math.sin(yaw)*Math.cos(pitch)*zoom,u.y+height+Math.sin(pitch)*zoom,focusZ+Math.cos(yaw)*Math.cos(pitch)*zoom);renderer.camera.lookAt(u.x,u.y+height,focusZ);renderer.renderer.render(renderer.scene,renderer.camera);
  const attack=u.attack||u.motion,p=attack?attack.elapsed/attack.duration:1,r=motionRhythm('sword',attack||{}),phase=p<r.windup?'構え・踏み込み':p<r.contactEnd?'斬撃':p<r.follow?'振り抜き':'戻し';
- const amount=Math.min(1,u.charge/battle.maxCharge(u));status.textContent=u.charging&&!u.attack?`チャージ ${Math.round(amount*100)}%${amount===1?' · 最大チャージ · 離して攻撃':''}`:attack?`${attack.charge>0?'チャージ斬撃':`${u.combo+1}段目：${names[u.combo]}`}　·　${phase}`:'構え';
+ const amount=Math.min(1,u.charge/battle.maxCharge(u));status.textContent=u.charging&&!u.attack?`チャージ ${Math.round(amount*100)}%${amount===1?' · 最大チャージ · 離して攻撃':''}`:attack?`${attack.charge>0?'回転薙ぎ払い':`${u.combo+1}段目：${names[u.combo]}`}　·　${phase}`:'構え';
 }
 function selectStage(stage){selected=stage;manualMode=false;document.querySelectorAll('[data-stage]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.stage)===stage)));document.querySelector('#charge-controls').hidden=stage!==4;reset();draw();}
 selectStage(selected);let previous=performance.now();

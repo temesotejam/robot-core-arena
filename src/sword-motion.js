@@ -75,28 +75,43 @@ const cuts=[
 // direction, with its own preparation and recovery timing.
 cuts[1]=[.10,.16,.27,.40,.53,.67].map((time,i)=>[time,cuts[0][[5,4,3,2,1,0][i]][1]]);
 cuts[1][0][1]=blendSword(cuts[0][5][1],cuts[0][4][1],.30);
-const chargeLow=pose(overheadArm(-1.23,1.72),[-.035,0,0],-.08,-.038,[0,-.012],[-.24,.10,.22,1.36,.02,.04,.02]);
-const chargeHigh=pose(overheadArm(-2.16,1.00),[-.075,0,0],-.12,-.055,[.006,-.020],[-.24,.10,.22,1.36,.02,.04,.02],[-.12,.06],[0,.018,-.012]);
+// The sweep keeps one horizontal blade plane. Rotation comes from the hips
+// and a full body turn, rather than rolling the wrist during the cut.
+const sweepArm=[.24759206,.01861577,-.43186010,1.83193764,-1.98144829,.025,0];
+const sweepLeft=[-.18,.10,.21,1.48,.02,.04,.02];
+const chargeLow=pose(sweepArm,[.025,-.25,.01],-.15,-.040,[.004,-.012],sweepLeft);
+const chargeHigh=pose(sweepArm,[.025,-.65,.01],-.28,-.065,[.008,-.020],sweepLeft,[-.12,.06]);
 export function swordChargeHold({amount=0,elapsed=0,from=null}={}){
- // Brief taps keep the ordinary guard. A held input raises the sword and
- // settles into a loaded pose, which stays still when the gauge is full.
  const loaded=blendSword(chargeLow,chargeHigh,ease(amount)),out=blendSword(from?.joints?from:ready,loaded,ease((elapsed-.10)/.22));
  return {...out,name:'chargeHold',chargeAmount:clamp(amount)};
 }
+export function swordSpinTurn(p){return ease((p-.20)/.58);}
+// The blade is offset from the center of the body. Calibrate its angular
+// passage at the target's distance, rather than treating it as a center ray.
+const sweepFrame=pose(sweepArm,[.025,0,0],0,-.055,[0,0],sweepLeft),sweepHand=new THREE.Quaternion().setFromEuler(new THREE.Euler(...sweepFrame.right.rotation)),sweepBody=new THREE.Quaternion().setFromEuler(new THREE.Euler(...sweepFrame.body));
+const sweepOrigin=new THREE.Vector3(...sweepFrame.right.position).applyQuaternion(sweepBody),sweepDirection=new THREE.Vector3(0,1,0).applyQuaternion(sweepHand).applyQuaternion(sweepBody);sweepOrigin.y=0;sweepDirection.y=0;sweepDirection.normalize();
+export function swordSpinAngle(attack,distance){
+ const along=sweepOrigin.dot(sweepDirection),offset=sweepOrigin.lengthSq()-along*along,t=-along+Math.sqrt(Math.max(0,distance*distance-offset)),point=sweepOrigin.clone().addScaledVector(sweepDirection,Math.max(.105,Math.min(.57,t)));
+ return Math.atan2(point.x,point.z)+Math.PI*2*swordSpinTurn(attack.elapsed/attack.duration);
+}
+function spinFeet(out,attack){
+ const turn=swordSpinTurn(attack.elapsed/attack.duration),q=turn*4,steps=[[[.35,.65],[1.35,1.65],[2.35,2.65],[3.35,3.65]],[[.80,1.10],[1.80,2.10],[2.80,3.10],[3.70,4]]];
+ const footYaw=[],feet=BASE_FEET.map((base,i)=>{
+  let angle=0,lift=0;for(const [start,end]of steps[i]){const t=clamp((q-start)/(end-start));angle+=Math.PI/2*ease(t);if(t>0&&t<1)lift=.045*Math.sin(Math.PI*t);}
+  const v=new THREE.Vector3(...base).applyAxisAngle(new THREE.Vector3(0,1,0),angle);v.y+=lift;footYaw[i]=angle+[-.08,.04][i];return v.toArray();
+ });
+ return {...out,feet,footYaw,footStride:[1,1],spinYaw:turn*Math.PI*2};
+}
 function swordChargedCut(attack,nextCombo){
- const amount=clamp(attack.charge),p=clamp(attack.elapsed/attack.duration),start=attack.blendFrom?.joints?attack.blendFrom:swordChargeHold({amount,elapsed:.32});
- const destination=nextCombo===null?ready:cuts[nextCombo%4][0][1];
- const out=track([
-  [0,start],
-  [.10,blendSword(start,chargeHigh,.20*amount)],
-  [.18,pose(overheadArm(-1.65,.90),[-.015,0,0],.06,-.065,[0,.014],[-.20,.10,.24,1.38,.02,.04,.02],[-.08,.06],[0,.018,0])],
-  [.30,pose(overheadArm(-.65,.98),[.10,0,0],.18,-.068,[0,.035],[-.08,-.06,.30,1.32,-.05,.04,.02],[.08,.06])],
-  [.42,pose(overheadArm(.60,1.15),[.23,0,0],.22,-.055,[0,.035],[-.03,-.16,.29,1.36,-.12,.04,.02],[.14,.07])],
-  [.53,pose(overheadArm(.85,1.40),[.17,0,0],.20,-.042,[0,.023],[-.10,-.10,.24,1.38,-.08,.04,.02],[.12,.07])],
-  [.67,pose(overheadArm(.70,1.58),[.08,0,0],.12,-.030,[0,.010])],
+ const amount=clamp(attack.charge),p=clamp(attack.elapsed/attack.duration),start=attack.blendFrom?.joints?attack.blendFrom:swordChargeHold({amount,elapsed:.32}),destination=nextCombo===null?ready:cuts[nextCombo%4][0][1];
+ const open=pose(sweepArm,[.025,0,0],.05,-.055,[0,0],sweepLeft),out=track([
+  [0,start],[.10,blendSword(start,chargeHigh,.18*amount)],
+  [.20,open],[.50,open],[.78,open],
+  [.87,pose(sweepArm,[.025,.18,.01],.08,-.042,[0,0],sweepLeft)],
   [1,destination],
- ],p);
- return plantSword(out,attack,'chargeCut');
+ ],p),planted=plantSword(out,attack,'chargeSweep');
+ if(p<.20)return {...planted,spinYaw:0};
+ return spinFeet(planted,attack);
 }
 function cubic(values,times,t){
  const [a,b,c,d]=values,[ta,tb,tc,td]=times,span=tc-tb,t2=t*t,t3=t2*t;
@@ -135,7 +150,7 @@ function plantSword(out,attack,name){
  const p=clamp(attack.elapsed/attack.duration);
  // Foot placement is in the attack's starting frame. Rendering subtracts actual
  // travelled distance, so a planted foot stays on the ground while the root moves.
- const charged=attack.charge>0,leadStart=charged?.05:.08,leadSpan=charged?.22:.25,rearStart=charged?.27:.28,rearSpan=charged?.25:.35;
+ const charged=attack.charge>0,leadStart=charged?.025:.08,leadSpan=charged?.09:.25,rearStart=charged?.115:.28,rearSpan=charged?.085:.35;
  const lead=ease((p-leadStart)/leadSpan),rear=ease((p-rearStart)/rearSpan),feet=out.feet.map(v=>[...v]);
  if(p>leadStart&&p<leadStart+leadSpan)feet[1][1]+=.037*Math.sin(Math.PI*(p-leadStart)/leadSpan);
  if(p>rearStart&&p<rearStart+rearSpan)feet[0][1]+=.030*Math.sin(Math.PI*(p-rearStart)/rearSpan);

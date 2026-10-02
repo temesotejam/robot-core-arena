@@ -14,7 +14,7 @@ try{
  await page.locator('#speed').selectOption('.25');await page.locator('#camera').selectOption('side');await page.locator('#replay').click();await page.waitForTimeout(8000);
  await page.locator('#play').click();const frozen=await page.evaluate(async()=>(await import('/src/sword-preview.js')).swordPreview.battle.time);await page.waitForTimeout(120);assert.equal(await page.evaluate(async()=>(await import('/src/sword-preview.js')).swordPreview.battle.time),frozen);
  // Frozen photographs use the same hold input and collision-limited release as battle.
- for(const camera of ['threequarter','side','front'])for(const phase of ['half','full',.18,.34,.42,.67]){
+ for(const camera of ['threequarter','side','front'])for(const phase of ['half','full',.20,.35,.50,.68,.78,.95]){
   await page.locator('#camera').selectOption(camera);await page.locator('#replay').click();
   await page.evaluate(async phase=>{const v=(await import('/src/sword-preview.js')).swordPreview,b=v.battle,u=b.human;
    for(let i=0;i<(phase==='half'?48:96);i++)b.tick(1/120,{attack:true});
@@ -29,7 +29,7 @@ try{
  assert((await page.locator('#pose').innerText()).includes('最大チャージ'));
  await page.keyboard.up('Space');await page.waitForFunction(async()=>{const u=(await import('/src/sword-preview.js')).swordPreview.battle.human;return u.attack?.charge===1;});
  await page.waitForFunction(async()=>!(await import('/src/sword-preview.js')).swordPreview.battle.human.motion);
- // Pointer release also works; actual partial input produces a partial charged cut.
+ // Pointer release also works; actual partial input produces a partial charged sweep.
  const box=await page.locator('#charge-hold').boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();
  await page.waitForFunction(async()=>(await import('/src/sword-preview.js')).swordPreview.battle.human.charge>=.3);await page.mouse.up();
  await page.waitForFunction(async()=>{const u=(await import('/src/sword-preview.js')).swordPreview.battle.human;return u.attack?.charge>0&&u.attack.charge<1;});
@@ -43,7 +43,7 @@ try{
  await page.locator('#play').click();await page.locator('#charge-level').selectOption('.5');await page.locator('#camera').selectOption('threequarter');await page.locator('#replay').click();
  await page.evaluate(async()=>{const v=(await import('/src/sword-preview.js')).swordPreview;for(let i=0;i<48;i++)v.battle.tick(1/120,{attack:true});v.draw();});
  await page.setViewportSize({width:390,height:844});
- for(const phase of ['half','full',.18,.34,.42,.67]){
+ for(const phase of ['half','full',.20,.35,.50,.68,.78,.95]){
   await page.locator('#replay').click();await page.evaluate(async phase=>{const v=(await import('/src/sword-preview.js')).swordPreview,b=v.battle,u=b.human;for(let i=0;i<(phase==='half'?48:96);i++)b.tick(1/120,{attack:true});if(typeof phase==='number'){b.handleInput(u,{},1/120);b.meleeStep(u,u.attack.duration*phase);}v.draw();const panel=document.querySelector('.controls').getBoundingClientRect();for(const ref of [v.model,v.targetModel])for(const leg of ref.feet){const foot=leg.foot||leg,p=foot.getWorldPosition(foot.position.clone());if(v.renderer.project(p.x,p.y,p.z).y>=panel.top-10)throw Error('Charge preview feet hidden by mobile controls');}const THREE=await import('/vendor/three.module.min.js'),tip=v.model.weaponAttachments[0].localToWorld(new THREE.Vector3(0,.57,0)),screen=v.renderer.project(tip.x,tip.y,tip.z);if(screen.x<12||screen.x>innerWidth-12||screen.y<90||screen.y>=panel.top-10)throw Error('Charged blade cropped on mobile '+JSON.stringify(screen));},phase);
   await page.screenshot({path:`charge-artifacts/charge-mobile-${phase}.png`});
  }
@@ -54,5 +54,5 @@ try{
  await game.evaluate(async()=>{const [{app},{defaultConfig}]=await Promise.all([import('/src/main.js'),import('/src/customize.js')]);app.state.units[0]=defaultConfig();app.state.enemies[0]=defaultConfig();Object.assign(app.state.setup,{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true});app.startBattle();const b=app.battle;b.countdown=0;b.training.freezeAI=true;b.training.infinite=true;Object.assign(b.human,{x:0,z:0,yaw:0,target:b.entities[1].id});Object.assign(b.entities[1],{x:0,z:.9,yaw:Math.PI});const attack=b.attack.bind(b);window.chargeReleases=[];b.attack=(u,charge=0)=>{const ok=attack(u,charge);if(ok&&u===b.human)window.chargeReleases.push({charge,coefficient:u.attack.coefficient,combo:u.combo,dash:u.dashTime});return ok;};});
  await game.mouse.move(500,300);await game.mouse.down();await game.locator('.charge-display[data-charge-ready="true"]').waitFor();assert((await game.locator('.charge-display').innerText()).includes('離して攻撃'));await game.screenshot({path:'charge-artifacts/charge-game-hud.png'});
  await game.mouse.up();await game.waitForFunction(()=>window.chargeReleases.length>0);assert.deepEqual(await game.evaluate(()=>window.chargeReleases[0]),{charge:1,coefficient:1.8,combo:0,dash:0});
- assert.deepEqual(errors,[]);console.log('Charge browser passed: actual hold/release/cancel, stable pause, maximum HUD, target and shield, 18 WebGL poses, mobile feet, real game binding.');
+ assert.deepEqual(errors,[]);console.log('Charge browser passed: actual hold/release/cancel, stable pause, maximum HUD, target and shield, 24 WebGL poses, mobile feet, real game binding.');
 }catch(e){console.error(e);if(browser)for(const p of browser.contexts().flatMap(c=>c.pages())){console.error('Page state:',await p.locator('body').innerText().catch(()=>''));await p.screenshot({path:'charge-artifacts/failure.png'}).catch(()=>{});}process.exitCode=1;}finally{await browser?.close();server.kill();}})();
