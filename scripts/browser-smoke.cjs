@@ -11,7 +11,7 @@ await page.locator('.nav [data-view="settings"]').click();
 const binding=(device,id,slot=0)=>page.locator(`[data-action="bindInput"][data-device="${device}"][data-id="${id}"][data-slot="${slot}"]`);
 await binding('keyboard','jump').click();await page.keyboard.press('KeyJ');await page.locator('#modal').waitFor({state:'hidden'});assert.equal(await binding('keyboard','jump').innerText(),'J');
 await binding('keyboard','attack').click();await page.keyboard.press('KeyK');await page.locator('#modal').waitFor({state:'hidden'});
-await binding('keyboard','guard').click();await page.locator('.binding-prompt').click({button:'middle'});await page.locator('#modal').waitFor({state:'hidden'});assert.equal(await binding('keyboard','guard').innerText(),'中クリック');
+await binding('keyboard','guard').click();const promptBox=await page.locator('.binding-prompt').boundingBox();await page.mouse.click(promptBox.x+promptBox.width/2,promptBox.y+promptBox.height/2,{button:'middle'});await page.locator('#modal').waitFor({state:'hidden'});assert.equal(await binding('keyboard','guard').innerText(),'中クリック');
 await binding('keyboard','pause').click();await page.keyboard.press('KeyP');await page.locator('#modal').waitFor({state:'hidden'});
 await binding('keyboard','jump',1).click();await page.locator('[data-action="cancelBinding"]').click();assert.equal(await binding('keyboard','jump',1).innerText(),'未割り当て');
 await page.evaluate(()=>{window.testPads=[];navigator.getGamepads=()=>window.testPads;});await binding('gamepad','jump').click();
