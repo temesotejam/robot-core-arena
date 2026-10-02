@@ -64,7 +64,7 @@ for(const view of ['front','side','rear'])for(let combo=0;combo<4;combo++)for(co
  await swordPage.screenshot({path:`artifacts/sword-${view}-${combo}-${Math.round(p*100)}.png`});
 }
 await swordPage.locator('#shield').selectOption('0');assert(await swordPage.evaluate(async()=>!(await import('/src/sword-preview.js')).swordPreview.model.hasShield));
-await swordPage.setViewportSize({width:390,height:844});assert(await swordPage.locator('.controls').evaluate(el=>el.getBoundingClientRect().right<=innerWidth));await swordPage.screenshot({path:'artifacts/sword-mobile.png'});
+await swordPage.setViewportSize({width:390,height:844});assert(await swordPage.locator('.controls').evaluate(el=>el.getBoundingClientRect().right<=innerWidth));await swordPage.evaluate(async()=>{const v=(await import('/src/sword-preview.js')).swordPreview;v.draw();const u=v.battle.human,foot=v.renderer.project(u.x,u.y+.035,u.z),panel=document.querySelector('.controls').getBoundingClientRect();if(foot.y>=panel.top-10)throw Error('Sword preview feet hidden by mobile controls');});await swordPage.screenshot({path:'artifacts/sword-mobile.png'});
 const swordVideo=swordPage.video();await swordPage.close();await swordVideo.saveAs('artifacts/sword-review.webm');
 // Verify visible poise and a real slow/fast exchange, using the game's normal fixed-step loop.
 const duelPage=await browser.newPage({viewport:{width:1100,height:680},recordVideo:{dir:'artifacts',size:{width:1100,height:680}}});duelPage.on('pageerror',e=>errors.push(e.message));

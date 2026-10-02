@@ -30,11 +30,19 @@ test('ソードは肩・肘・前腕から手の位置を作り、関節の長�
  }
 });
 test('ソードの接地した足は実際の前進・骨盤回転中も同じ地面の位置に残る',()=>{
- for(const yaw of [0,.7,Math.PI/2])for(let combo=0;combo<4;combo++)for(const [legIndex,begin,end]of [[0,.09,.26],[1,.34,.53]]){
-  const {ref,u}=rig();u.yaw=yaw;let anchor;
-  for(let p=begin;p<=end+1e-9;p+=.005){const a={weapon:'sword',combo,elapsed:p,duration:1},travel=.24*stepPhase(a);u.x=Math.sin(yaw)*travel;u.z=Math.cos(yaw)*travel;at(ref,u,combo,p,{origin:[0,0,0],yaw});
+ for(const yaw of [0,.7,Math.PI/2])for(const tracking of [false,true])for(let combo=0;combo<4;combo++)for(const [legIndex,begin,end]of [[0,.09,.26],[1,.34,.53]]){
+  const {ref,u}=rig();let anchor;
+  for(let p=begin;p<=end+1e-9;p+=.005){const a={weapon:'sword',combo,elapsed:p,duration:1},travel=.24*stepPhase(a);u.yaw=yaw+(tracking?.13*Math.sin(p*4):0);u.x=Math.sin(yaw)*travel;u.z=Math.cos(yaw)*travel;at(ref,u,combo,p,{origin:[0,0,0],yaw});
    const foot=ref.feet[legIndex].foot.getWorldPosition(new THREE.Vector3());anchor??=foot.clone();assert(foot.distanceTo(anchor)<1e-7,`${combo} ${yaw} ${legIndex} ${p}: 接地した足が滑る`);
   }
+ }
+});
+test('ソードは先行入力を押している間も関節動作を保ち、振り下ろしでは刃の面で叩かない',()=>{
+ const {ref,u}=rig();at(ref,u,0,.40);const hand=ref.arms[0].hand.position.clone(),q=ref.arms[0].hand.quaternion.clone();u.charging=true;ArenaRenderer.prototype.animateRobot.call({},ref,u,.40);assert(ref.arms[0].hand.position.distanceTo(hand)<1e-9);assert(ref.arms[0].hand.quaternion.angleTo(q)<1e-7);u.charging=false;
+ for(const p of [.30,.35,.40,.45]){
+  at(ref,u,3,p-.001);const before=ref.weaponAttachments[0].localToWorld(new THREE.Vector3(0,.57,0));at(ref,u,3,p+.001);const after=ref.weaponAttachments[0].localToWorld(new THREE.Vector3(0,.57,0)),velocity=after.sub(before).normalize();at(ref,u,3,p);
+  const rotation=ref.weaponAttachments[0].getWorldQuaternion(new THREE.Quaternion()),edge=new THREE.Vector3(1,0,0).applyQuaternion(rotation),flat=new THREE.Vector3(0,0,1).applyQuaternion(rotation);
+  assert(Math.abs(velocity.dot(edge))>.80,'振る方向へ刃先を向ける');assert(Math.abs(velocity.dot(flat))<.15,'刃の平面が進行方向を向かない');
  }
 });
 test('通常ソードの刃の中心線は全5フレームで胴・頭・盾を突き抜けず、剣先が床を抜けない',()=>{

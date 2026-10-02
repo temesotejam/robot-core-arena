@@ -72,7 +72,7 @@ function poseWeapons(ref,u=null,time=0){
  const pulse=p=>{if(p<=0||p>=1)return 0;const t=p<.24?p/.24:1-(p-.24)/.76;return t*t*(3-2*t);},recoil=shot?pulse(shotProgress)*kick(w.id):0;
  for(const weapon of ref.weaponAttachments)if(weapon.userData.flash)weapon.userData.flash.visible=!!shot&&shotProgress<.3&&!u.dead&&!u.guard;
  for(const [i,arm]of ref.arms.entries()){
-  if(motion.joints&&!u?.guard&&!u?.charging&&!u?.dead&&!(u?.down>0)){poseSwordArm(arm,motion.joints[i?'left':'right']);continue;}
+  if(motion.joints&&!u?.guard&&(!u?.charging||attack)&&!u?.dead&&!(u?.down>0)){poseSwordArm(arm,motion.joints[i?'left':'right']);continue;}
   const side=arm.userData.side,armed=i===0||dual,p=armed&&!w.ranged?(i?motion.left:motion.right):readyPose(w.id,side),target=new THREE.Vector3(...p.position),rotation=new THREE.Euler(...p.rotation);
   if(armed&&w.ranged){const handRecoil=w.id==='dualGun'&&i===1?pulse((shotProgress-.12)/.88)*kick(w.id):recoil;target.z-=handRecoil;target.y+=handRecoil*.22;rotation.x=-handRecoil*(['pistol','shotgun','dualGun'].includes(w.id)?3.2:1.4);}
   if(!attack&&!w.ranged&&speed>.2){target.z+=Math.sin(time*12)*(i?-1:1)*.025;}
@@ -175,7 +175,7 @@ export class ArenaRenderer{
    if(canPose&&u.grounded&&motion.plantOrigin&&!u.guard){
     const travel=new THREE.Vector3(u.x-motion.plantOrigin[0],0,u.z-motion.plantOrigin[2]).applyAxisAngle(new THREE.Vector3(0,1,0),-(motion.plantYaw??u.yaw));
     const a=u.attack||u.motion,r=motionRhythm('sword',a),p=Math.min(1,a.elapsed/a.duration),t=Math.max(0,Math.min(1,(p-r.windup*.5)/(r.contactEnd-r.windup*.5))),phase=t*t*(3-2*t),distance=Math.min(r.advance,Math.max(0,travel.z)/Math.max(.001,phase));
-    foot.z+=distance*motion.footStride[i];foot.sub(travel);
+    foot.z+=distance*motion.footStride[i];foot.sub(travel).applyAxisAngle(new THREE.Vector3(0,1,0),(motion.plantYaw??u.yaw)-u.yaw);
    }
    if(!canPose)foot.set(leg.userData.side*.105,.035,.045);
    else if(!u.grounded){foot.y+=.075;foot.z-=.055;}
@@ -190,7 +190,7 @@ export class ArenaRenderer{
     settle=Math.max(settle,-ankle.y-vertical);
    }settle=Math.min(.10,settle);ref.legGroup.position.y-=settle;ref.bodyPivot.position.y-=settle;
   }
-  for(const [i,leg]of ref.feet.entries())if(leg.knee){const foot=footTargets[i].clone().sub(ref.legGroup.position).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw);poseLeg(leg,foot);leg.foot.rotation.y=(motion.footYaw[i]||0)-hipYaw;}
+  for(const [i,leg]of ref.feet.entries())if(leg.knee){const foot=footTargets[i].clone().sub(ref.legGroup.position).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw);poseLeg(leg,foot);leg.foot.rotation.y=(motion.footYaw[i]||0)-hipYaw+(canPose&&u.grounded&&motion.plantOrigin&&!u.guard?(motion.plantYaw??u.yaw)-u.yaw:0);}
   ref.head.rotation.y=canPose?-motion.body[1]*(motion.sword?.75:.28):0;ref.head.rotation.x=canPose?-motion.body[0]*(motion.sword?.65:.20):0;ref.ring.material.opacity=u.buffTime>0?.85:.45;updateTrails(ref,u,time,motion.name);
  }
 

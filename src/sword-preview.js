@@ -27,7 +27,7 @@ function draw(){
  const u=battle.human;renderer.animateRobot(model,u,battle.time);model.ring.visible=false;
  // The camera follows actual travel. The stationary floor and shadows make
  // grounded feet and any sliding visible, rather than hiding root movement.
- const height=innerWidth<600?.74:.64;renderer.camera.position.set(u.x+Math.sin(yaw)*Math.cos(pitch)*distance,u.y+height+Math.sin(pitch)*distance,u.z+Math.cos(yaw)*Math.cos(pitch)*distance);renderer.camera.lookAt(u.x,u.y+height,u.z);renderer.renderer.render(renderer.scene,renderer.camera);
+ const mobile=innerWidth<600,height=mobile?.42:.64,zoom=mobile?distance*1.30:distance;renderer.camera.position.set(u.x+Math.sin(yaw)*Math.cos(pitch)*zoom,u.y+height+Math.sin(pitch)*zoom,u.z+Math.cos(yaw)*Math.cos(pitch)*zoom);renderer.camera.lookAt(u.x,u.y+height,u.z);renderer.renderer.render(renderer.scene,renderer.camera);
  const attack=u.attack||u.motion,p=attack?attack.elapsed/attack.duration:1,phase=p<.16?'構え・踏み込み':p<.53?'斬撃':p<.67?'振り抜き':'戻し';
  status.textContent=attack?`${u.combo+1}段目：${names[u.combo]}　·　${phase}`:'構え';
 }
