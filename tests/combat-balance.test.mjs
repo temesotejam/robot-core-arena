@@ -13,9 +13,9 @@ function duel(a='hammer',b='knuckle'){
 function packet(b,u,extra={}){return {id:`test:${b.serial++}`,weapon:u.stats.weapon.id,attackStats:u.stats,normal:true,coefficient:1,charge:0,finisher:false,exhausted:false,cPaid:new Set(),statusPaid:new Set(),freezeBoost:new Set(),...extra};}
 function committed(b,u){assert(b.attack(u));u.attack.elapsed=.1;u.motion.elapsed=.1;return u.attack;}
 test('遅い近接4種は軽い4種の連打に攻撃を返せる：処理順・60/120fps・先手を変えて検証',()=>{
- for(const heavy of Object.keys(POISE))for(const light of ['knuckle','dagger','rapier','dualSword'])for(const reverse of [false,true])for(const fps of [60,120])for(const delay of [0,.1]){
+ for(const heavy of Object.keys(POISE))for(const light of ['knuckle','dagger','rapier','dualSword'])for(const reverse of [false,true])for(const fps of [60,120])for(const delay of [-.1,0,.1]){
   const b=reverse?duel(light,heavy):duel(heavy,light),h=b.entities.find(u=>u.stats.weapon.id===heavy),l=b.entities.find(u=>u.stats.weapon.id===light);let braces=0;
-  for(let i=0;i<fps*6;i++){b.attack(l);if(i/fps>=delay)b.attack(h);b.tick(1/fps);braces+=b.consumeEvents().filter(e=>e.type==='brace').length;}
+  for(let i=0;i<fps*6;i++){if(i/fps>=Math.max(0,-delay))b.attack(l);if(i/fps>=Math.max(0,delay))b.attack(h);b.tick(1/fps);braces+=b.consumeEvents().filter(e=>e.type==='brace').length;}
   const label=`${heavy}/${light} reverse=${reverse} fps=${fps} delay=${delay}`;
   assert(h.dealt>300,`${label}: 遅い武器の攻撃が封じられる`);assert(l.dealt>200,`${label}: 軽い武器も攻撃できる`);assert(braces>0,label);
  }
