@@ -11,25 +11,39 @@ await page.goto('http://127.0.0.1:4173');await page.locator('.home-copy').waitFo
 const gallery=await browser.newPage({viewport:{width:1440,height:1080}});gallery.on('pageerror',e=>errors.push(e.message));
 await gallery.goto('http://127.0.0.1:4173');await gallery.locator('.home-copy').waitFor();
 await gallery.addStyleTag({content:'body>div{display:none!important}.weapon-label{display:block!important;position:fixed;transform:translateX(-50%);color:#dcf9f1;font:16px sans-serif;pointer-events:none}'});
-for(const pose of ['front','side','attack']){
+for(const pose of ['front','side','attack','frames']){
  await gallery.evaluate(async pose=>{
-  const [{app},THREE,{createRobot},{defaultConfig},{CATALOG,WEAPONS}]=await Promise.all([import('/src/main.js'),import('/vendor/three.module.min.js'),import('/src/render.js'),import('/src/customize.js'),import('/src/data.js')]);
+  const [{app},THREE,{createRobot},{defaultConfig},{CATALOG,WEAPONS,FRAMES,PARTS}]=await Promise.all([import('/src/main.js'),import('/vendor/three.module.min.js'),import('/src/render.js'),import('/src/customize.js'),import('/src/data.js')]);
   const r=app.renderer;app.view='inspection';r.mode='inspection';r.clear();r.scene.fog=null;r.renderer.shadowMap.enabled=false;
   r.camera=new THREE.OrthographicCamera(-16/3,16/3,4,-4,.04,100);r.camera.position.set(0,.5,20);r.camera.lookAt(0,.5,0);r.camera.updateMatrixWorld();
   document.querySelectorAll('.weapon-label').forEach(el=>el.remove());
-  Object.entries(WEAPONS).forEach(([kind,w],i)=>{
-   const config=defaultConfig();config.sets[0]={item:`weapon:${kind}`,shield:w.shield?'shield:basic':null};const ref=createRobot(config,id=>CATALOG[id]);ref.active=0;
-   const x=(i%5-2)*2.1,y=(1.5-Math.floor(i/5))*1.6,yaw=pose==='side'?-Math.PI/2:-.45;
+  const entries=pose==='frames'?Object.keys(FRAMES).map(()=>['sword',WEAPONS.sword]):Object.entries(WEAPONS);
+  entries.forEach(([kind,w],i)=>{
+   const config=defaultConfig(),frame=Object.keys(FRAMES)[i%5];if(pose==='frames')config.armor=Object.fromEntries(PARTS.map(p=>[p,`armor:${frame}:${p}`]));config.sets[0]={item:`weapon:${kind}`,shield:w.shield?'shield:basic':null};const ref=createRobot(config,id=>CATALOG[id]);ref.active=0;
+   const x=(i%5-2)*2.1,y=pose==='frames'?0:(1.5-Math.floor(i/5))*1.6,yaw=pose==='side'?-Math.PI/2:-.45;
    if(pose==='attack')r.animateRobot(ref,{config,active:0,stats:{weapon:w,frame:'knight'},x,y,z:0,yaw,vx:0,vz:0,dashTime:0,grounded:true,attack:w.ranged?null:{elapsed:.5,duration:1,thrust:['rapier','lance'].includes(kind)},actionTime:w.ranged?.1:0},.12);
    else {ref.root.position.set(x,y,0);ref.root.rotation.y=yaw;}
    ref.ring.visible=false;ref.root.updateMatrixWorld(true);r.world.add(ref.root);
    for(const weapon of ref.weaponAttachments.filter(o=>o.name!=='shield'))if(weapon.getWorldPosition(new THREE.Vector3()).distanceTo(weapon.parent.getWorldPosition(new THREE.Vector3()))>1e-6)throw Error(`${kind}: weapon detached`);
-   const label=document.createElement('div'),point=new THREE.Vector3(x,y-.22,0).project(r.camera);label.className='weapon-label';label.textContent=w.name;label.style.left=`${(point.x*.5+.5)*innerWidth}px`;label.style.top=`${(-point.y*.5+.5)*innerHeight}px`;document.body.append(label);
+   const label=document.createElement('div'),point=new THREE.Vector3(x,y-.22,0).project(r.camera);label.className='weapon-label';label.textContent=pose==='frames'?FRAMES[frame].name:w.name;label.style.left=`${(point.x*.5+.5)*innerWidth}px`;label.style.top=`${(-point.y*.5+.5)*innerHeight}px`;document.body.append(label);
   });r.renderer.render(r.scene,r.camera);
  },pose);
  await gallery.waitForTimeout(150);await gallery.screenshot({path:`artifacts/weapons-${pose}.png`});
 }
 await gallery.close();
+const motionPage=await browser.newPage({viewport:{width:960,height:640},recordVideo:{dir:'artifacts',size:{width:960,height:640}}});motionPage.on('pageerror',e=>errors.push(e.message));
+await motionPage.goto('http://127.0.0.1:4173');await motionPage.locator('.home-copy').waitFor();
+await motionPage.addStyleTag({content:'body>div{display:none!important}.motion-caption{display:block!important;position:fixed;left:0;right:0;bottom:24px;text-align:center;color:#dcf9f1;font:18px sans-serif}'});
+await motionPage.evaluate(async()=>{
+ const [{app},THREE,{createRobot},{defaultConfig},{CATALOG,WEAPONS}]=await Promise.all([import('/src/main.js'),import('/vendor/three.module.min.js'),import('/src/render.js'),import('/src/customize.js'),import('/src/data.js')]);
+ const r=app.renderer;app.view='inspection';r.mode='inspection';r.clear();r.scene.fog=null;r.renderer.shadowMap.enabled=false;r.camera.position.set(.5,1.4,5.7);r.camera.lookAt(0,.52,0);
+ const models=['sword','dualSword','knuckle'].map((kind,i)=>{const config=defaultConfig();config.sets[0]={item:`weapon:${kind}`,shield:null};const ref=createRobot(config,id=>CATALOG[id]);ref.active=0;r.world.add(ref.root);return {ref,kind,config,x:(i-1)*1.35};});
+ const label=document.createElement('div');label.className='motion-caption';document.body.append(label);const start=performance.now();
+ function animate(now){const time=(now-start)/1000;label.textContent=models.map(({kind})=>`${WEAPONS[kind].name} ${Math.floor(time/.52)%WEAPONS[kind].combo+1}段`).join('　 /　 ');
+  for(const {ref,kind,config,x}of models){const elapsed=time%.52;r.animateRobot(ref,{config,active:0,stats:{weapon:WEAPONS[kind],frame:'knight'},x,y:0,z:0,yaw:-.12,vx:0,vz:0,dashTime:0,grounded:true,attack:elapsed<.43?{weapon:kind,combo:Math.floor(time/.52)%WEAPONS[kind].combo,elapsed,duration:.43}:null},time);ref.ring.visible=false;}
+  requestAnimationFrame(animate);
+ }requestAnimationFrame(animate);
+});await motionPage.waitForTimeout(6500);await motionPage.screenshot({path:'artifacts/combo-motion.png'});const video=motionPage.video();await motionPage.close();await video.saveAs('artifacts/combo-motion.webm');
 await page.locator('.nav [data-view="settings"]').click();
 const binding=(device,id,slot=0)=>page.locator(`[data-action="bindInput"][data-device="${device}"][data-id="${id}"][data-slot="${slot}"]`);
 await binding('keyboard','jump').click();await page.keyboard.press('KeyJ');await page.locator('#modal').waitFor({state:'hidden'});assert.equal(await binding('keyboard','jump').innerText(),'J');
@@ -47,6 +61,10 @@ for(const tab of ['passives','abilities','armor'])await page.locator(`[data-acti
 await page.locator('.nav [data-view="setup"]').click();await page.locator('[data-field="allies"]').selectOption('3');await page.locator('[data-field="enemies"]').selectOption('3');await page.locator('[data-action="startBattle"]').click();await page.locator('.hud-resources').waitFor();await page.waitForTimeout(500);
 await page.evaluate(async()=>{const {app}=await import('/src/main.js');if(app.battle.entities.length!==6)throw Error('3v3 failed');app.battle.countdown=0;});
 await page.evaluate(async()=>{const {app}=await import('/src/main.js');const u=app.battle.human,r=app.renderer;r.camera.updateMatrixWorld();const start=r.project(u.x,u.y+.5,u.z),delta=r.movement(1,0),right=r.project(u.x+delta.x,u.y+.5,u.z+delta.z);if(right.x<=start.x)throw Error('Right movement is reversed');});
+await page.evaluate(async()=>{const {app}=await import('/src/main.js');window.testOriginalAi=app.battle.ai;app.battle.ai=()=>({});});
+const tapAttack=async()=>{await page.keyboard.down('KeyK');await page.waitForTimeout(30);await page.keyboard.up('KeyK');};await tapAttack();
+for(const stage of [1,2,3]){await page.waitForFunction(async()=>{const {app}=await import('/src/main.js');const cooldown=app.battle.runtime(app.battle.human).cooldown;return cooldown<=.16&&cooldown>.02;});await tapAttack();await page.waitForFunction(async stage=>(await import('/src/main.js')).app.battle.human.combo===stage,stage);}
+await page.waitForTimeout(80);await page.screenshot({path:'artifacts/combo-battle.png'});assert((await page.locator('.hud-weapon .ammo').innerText()).includes('4段'));await page.evaluate(async()=>{const {app}=await import('/src/main.js');app.battle.ai=window.testOriginalAi;});
 await page.keyboard.down('KeyK');await page.waitForTimeout(100);assert(await page.evaluate(async()=> (await import('/src/main.js')).app.battle.human.lastAttackHeld));await page.keyboard.up('KeyK');
 await page.keyboard.down('KeyW');await page.waitForTimeout(500);await page.keyboard.up('KeyW');await page.keyboard.press('KeyJ');await page.waitForTimeout(200);await page.keyboard.press('Tab');await page.keyboard.press('KeyQ');await page.waitForTimeout(500);await page.screenshot({path:'artifacts/battle.png'});
 await page.keyboard.press('KeyP');await page.locator('.modal-card').waitFor();const before=await page.evaluate(async()=> (await import('/src/main.js')).app.battle.time);await page.waitForTimeout(250);assert.equal(await page.evaluate(async()=> (await import('/src/main.js')).app.battle.time),before);await page.locator('[data-action="showBindings"]').click();await binding('keyboard','jump').click();await page.keyboard.press('KeyL');await page.locator('.modal-card.wide').waitFor();assert(await page.evaluate(async()=> (await import('/src/main.js')).app.battle.paused));assert.equal(await binding('keyboard','jump').innerText(),'L');await page.locator('#modal [data-action="showPause"]').click();await page.locator('[data-action="closeModal"]').first().click();
