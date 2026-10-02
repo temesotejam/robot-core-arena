@@ -21,6 +21,7 @@ try{
    if(typeof phase==='number'){b.handleInput(u,{},1/120);b.meleeStep(u,u.attack.duration*phase);}
    v.draw();
   },phase);await page.screenshot({path:`charge-artifacts/charge-${camera}-${phase}.png`});
+  await page.evaluate(async()=>{const v=(await import('/src/sword-preview.js')).swordPreview,u=v.battle.human,panel=document.querySelector('.controls').getBoundingClientRect();for(const ref of [v.model,v.targetModel])for(const leg of ref.feet){const foot=leg.foot||leg,p=foot.getWorldPosition(foot.position.clone());if(v.renderer.project(p.x,p.y,p.z).y>=panel.top-10)throw Error('Charge feet hidden by desktop controls');}});
  }
  // A real keyboard hold/release on the viewer's accessible manual button.
  await page.locator('#speed').selectOption('1');await page.locator('#charge-hold').focus();await page.keyboard.down('Space');
@@ -41,7 +42,11 @@ try{
  await page.waitForTimeout(200);assert(await page.evaluate(async()=>!(await import('/src/sword-preview.js')).swordPreview.battle.human.attack));
  await page.locator('#play').click();await page.locator('#charge-level').selectOption('.5');await page.locator('#camera').selectOption('threequarter');await page.locator('#replay').click();
  await page.evaluate(async()=>{const v=(await import('/src/sword-preview.js')).swordPreview;for(let i=0;i<48;i++)v.battle.tick(1/120,{attack:true});v.draw();});
- await page.setViewportSize({width:390,height:844});await page.evaluate(async()=>{const v=(await import('/src/sword-preview.js')).swordPreview;v.draw();const u=v.battle.human,foot=v.renderer.project(u.x,u.y+.035,u.z),panel=document.querySelector('.controls').getBoundingClientRect();if(foot.y>=panel.top-10)throw Error('Charge preview feet hidden by mobile controls');});
+ await page.setViewportSize({width:390,height:844});
+ for(const phase of ['half','full',.18,.34,.42,.67]){
+  await page.locator('#replay').click();await page.evaluate(async phase=>{const v=(await import('/src/sword-preview.js')).swordPreview,b=v.battle,u=b.human;for(let i=0;i<(phase==='half'?48:96);i++)b.tick(1/120,{attack:true});if(typeof phase==='number'){b.handleInput(u,{},1/120);b.meleeStep(u,u.attack.duration*phase);}v.draw();const panel=document.querySelector('.controls').getBoundingClientRect();for(const ref of [v.model,v.targetModel])for(const leg of ref.feet){const foot=leg.foot||leg,p=foot.getWorldPosition(foot.position.clone());if(v.renderer.project(p.x,p.y,p.z).y>=panel.top-10)throw Error('Charge preview feet hidden by mobile controls');}const THREE=await import('/vendor/three.module.min.js'),tip=v.model.weaponAttachments[0].localToWorld(new THREE.Vector3(0,.57,0)),screen=v.renderer.project(tip.x,tip.y,tip.z);if(screen.x<12||screen.x>innerWidth-12||screen.y<90||screen.y>=panel.top-10)throw Error('Charged blade cropped on mobile '+JSON.stringify(screen));},phase);
+  await page.screenshot({path:`charge-artifacts/charge-mobile-${phase}.png`});
+ }
  assert(await page.locator('.controls').evaluate(el=>el.getBoundingClientRect().right<=innerWidth));await page.screenshot({path:'charge-artifacts/charge-mobile.png'});
  const video=page.video();await page.close();await video.saveAs('charge-artifacts/charge-review.webm');
  // The actual game uses the user's attack binding and displays a full-charge cue.
