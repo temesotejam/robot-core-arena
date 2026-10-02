@@ -21,3 +21,9 @@ test('同じ武器を両セットへ登録しても残弾と再使用待ちが�
 test('武器切替で使用済みの空中ジャンプを補充しない',()=>{const c=defaultConfig();c.sets[1].item='weapon:hammer';c.sets[1].shield=null;const b=battle({allies:[c]});b.countdown=0;const u=b.human;assert.ok(b.jump(u));assert.equal(u.jumpsUsed,1);u.active=1;b.refreshStats(u);assert.equal(b.jump(u),false);u.active=0;b.refreshStats(u);assert.ok(b.jump(u));assert.equal(u.jumpsUsed,2);assert.equal(b.jump(u),false);});
 test('壁は弾道と爆風を遮り、表面から壁の裏にも通らない',()=>{const stage={obstacles:[{x:0,z:0,w:2,d:2,h:3}],ramps:[]};assert.equal(lineClear(stage,{x:-2,y:1,z:0},{x:2,y:1,z:0}),false);assert.equal(lineClear(stage,{x:-1,y:1,z:0},{x:2,y:1,z:0}),false);assert.equal(lineClear(stage,{x:-1,y:1,z:0},{x:-3,y:1,z:0}),true);});
 test('全9人数構成で開始でき、初期資源と編成が成立する',()=>{for(let a=1;a<=3;a++)for(let e=1;e<=3;e++){const b=battle({allies:Array.from({length:a},(_,i)=>defaultConfig(i)),enemies:Array.from({length:e},(_,i)=>defaultConfig(i,true)),setup:{allies:a,enemies:e,stage:'yard',player:0,duration:180,coordination:'spread'}});assert.equal(b.entities.length,a+e);assert.equal(b.human.c,0);assert.equal(b.human.tension,100);}});
+
+test('バックアップは未知の装備・領域・不正な記録を拒否し、編集途中の構成を保持する',async()=>{
+ const {freshSave,validateSave}=await import('../src/storage.js');
+ const valid=freshSave();valid.units[0].placements=[];assert.equal(validateSave(valid),valid);
+ for(const mutate of [s=>s.units[0].armor.head='missing',s=>s.units[0].sets[0].item='missing',s=>s.units[0].placements[0].region='missing',s=>s.records.wins=-1,s=>s.settings.sensitivity=NaN]){const s=freshSave();mutate(s);assert.throws(()=>validateSave(s));}
+});
