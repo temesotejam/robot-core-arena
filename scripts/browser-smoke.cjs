@@ -32,22 +32,24 @@ for(const pose of ['front','side','attack','frames']){
 }
 await gallery.close();
 // Record real simulation-driven buffered combos, including different weapon rhythms.
+for(const [group,kinds]of [['sword','knuckle','hammer'],['rapier','dualSword','dagger'],['lance','naginata','scythe'],['pistol','dualGun','sniper']].entries()){
 const motionPage=await browser.newPage({viewport:{width:1100,height:680},recordVideo:{dir:'artifacts',size:{width:1100,height:680}}});motionPage.on('pageerror',e=>errors.push(e.message));
 await motionPage.goto('http://127.0.0.1:4173');await motionPage.locator('.home-copy').waitFor();
 await motionPage.addStyleTag({content:'body>div{display:none!important}.motion-caption{display:block!important;position:fixed;left:0;right:0;bottom:24px;text-align:center;color:#dcf9f1;font:18px sans-serif}'});
-await motionPage.evaluate(async()=>{
+await motionPage.evaluate(async kinds=>{
  const [{app},THREE,{createRobot},{defaultConfig},{CATALOG,WEAPONS,PARTS},{Battle}]=await Promise.all([import('/src/main.js'),import('/vendor/three.module.min.js'),import('/src/render.js'),import('/src/customize.js'),import('/src/data.js'),import('/src/sim.js')]);
  const r=app.renderer;app.view='inspection';r.mode='inspection';r.clear();r.scene.fog=null;r.renderer.shadowMap.enabled=false;r.camera.position.set(.25,1.35,5.8);r.camera.lookAt(0,.52,0);r.floor(6,4);
- const models=['sword','knuckle','hammer'].map((kind,i)=>{const config=defaultConfig();config.sets[0]={item:`weapon:${kind}`,shield:null};config.armor=Object.fromEntries(PARTS.map(p=>[p,`armor:${['knight','brawler','wild'][i]}:${p}`]));
+ const models=kinds.map((kind,i)=>{const config=defaultConfig();config.sets[0]={item:`weapon:${kind}`,shield:null};config.armor=Object.fromEntries(PARTS.map(p=>[p,`armor:${['knight','brawler','wild'][i]}:${p}`]));
   const battle=new Battle({allies:[config],enemies:[defaultConfig()],setup:{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true},getItem:id=>CATALOG[id]});battle.countdown=0;battle.training.freezeAI=true;battle.training.infinite=true;Object.assign(battle.human,{x:0,z:0,yaw:0});battle.entities[1].y=10;
   const ref=createRobot(config,id=>CATALOG[id]);ref.active=0;r.world.add(ref.root);return {ref,kind,battle,x:(i-1)*1.45,pressing:false};});
  const label=document.createElement('div');label.className='motion-caption';document.body.append(label);const start=performance.now();let simulated=0;
  function animate(now){const time=(now-start)/1000;
   while(simulated<time){for(const m of models){const u=m.battle.human,rt=m.battle.runtime(u),want=!u.charging&&!u.queuedAttack&&(!u.attack&&rt.cooldown===0||u.attack&&rt.cooldown<=.15&&rt.cooldown>0);let input={};if(m.pressing)m.pressing=false;else if(want){input={attack:true};m.pressing=true;}m.battle.tick(1/120,input);m.battle.consumeEvents();}simulated+=1/120;}
-  label.textContent=models.map(({kind,battle})=>`${WEAPONS[kind].name} ${battle.human.combo+1}段`).join('　 /　 ');
+  label.textContent=models.map(({kind,battle})=>`${WEAPONS[kind].name} ${WEAPONS[kind].ranged?'射撃':`${battle.human.combo+1}段`}`).join('　 /　 ');
   for(const {ref,battle,x}of models){r.animateRobot(ref,{...battle.human,x,z:0},battle.time);ref.ring.visible=false;}requestAnimationFrame(animate);
  }requestAnimationFrame(animate);
-});await motionPage.waitForTimeout(8200);await motionPage.screenshot({path:'artifacts/combo-motion.png'});const video=motionPage.video();await motionPage.close();await video.saveAs('artifacts/combo-motion.webm');
+},kinds);await motionPage.waitForTimeout(8200);const suffix=group?`-${group+1}`:'';await motionPage.screenshot({path:`artifacts/combo-motion${suffix}.png`});const video=motionPage.video();await motionPage.close();await video.saveAs(`artifacts/combo-motion${suffix}.webm`);
+}
 // Verify visible poise and a real slow/fast exchange, using the game's normal fixed-step loop.
 const duelPage=await browser.newPage({viewport:{width:1100,height:680},recordVideo:{dir:'artifacts',size:{width:1100,height:680}}});duelPage.on('pageerror',e=>errors.push(e.message));
 await duelPage.goto('http://127.0.0.1:4173');await duelPage.locator('.home-copy').waitFor();

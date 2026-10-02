@@ -58,11 +58,13 @@ function poseLeg(leg,target){
 // Both the hangar and battle use these poses; attachments never need to cancel a shoulder rotation.
 function poseWeapons(ref,u=null,time=0){
  const w=WEAPONS[ref.kind],speed=u?Math.hypot(u.vx,u.vz):0,attack=u?.attack||(u?.motion?.weapon===w.id&&!w.ranged?u.motion:null),motion=sampleMotion(w.id,attack,{nextCombo:u?.queuedAttack?((attack?.combo||0)+1)%w.combo:null}),dual=['dualSword','dualGun','knuckle'].includes(w.id);
- const shot=u?.motion?.weapon===w.id&&w.ranged?u.motion:null,shotProgress=shot?THREE.MathUtils.clamp(shot.elapsed/shot.duration,0,1):0,recoil=Math.sin(shotProgress*Math.PI)*(['sniper','bazooka','heavyShotgun'].includes(w.id)?.04:.022);
+ const shot=u?.motion?.weapon===w.id&&w.ranged?u.motion:null,shotProgress=shot?THREE.MathUtils.clamp(shot.elapsed/shot.duration,0,1):0;
+ const kick=kind=>({machinegun:.012,assault:.015,dualGun:.020,pistol:.028,shotgun:.035,rifle:.038,sniper:.050,heavyShotgun:.045,bazooka:.052,missile:.030})[kind]||.022;
+ const pulse=p=>{if(p<=0||p>=1)return 0;const t=p<.24?p/.24:1-(p-.24)/.76;return t*t*(3-2*t);},recoil=shot?pulse(shotProgress)*kick(w.id):0;
  for(const weapon of ref.weaponAttachments)if(weapon.userData.flash)weapon.userData.flash.visible=!!shot&&shotProgress<.3&&!u.dead&&!u.guard;
  for(const [i,arm]of ref.arms.entries()){
   const side=arm.userData.side,armed=i===0||dual,p=armed&&!w.ranged?(i?motion.left:motion.right):readyPose(w.id,side),target=new THREE.Vector3(...p.position),rotation=new THREE.Euler(...p.rotation);
-  if(armed&&w.ranged){target.z-=recoil;rotation.x=-recoil*2;}
+  if(armed&&w.ranged){const handRecoil=w.id==='dualGun'&&i===1?pulse((shotProgress-.12)/.88)*kick(w.id):recoil;target.z-=handRecoil;target.y+=handRecoil*.22;rotation.x=-handRecoil*(['pistol','shotgun','dualGun'].includes(w.id)?3.2:1.4);}
   if(!attack&&!w.ranged&&speed>.2){target.z+=Math.sin(time*12)*(i?-1:1)*.025;}
   if(u?.charging&&!w.ranged&&!attack&&i===0){target.y+=.10;rotation.x-=.6*Math.min(1,u.charge/(w.charge||1));}
   if(i===1&&ref.hasShield)target.set(.28,.43,.14);
@@ -74,16 +76,17 @@ function poseWeapons(ref,u=null,time=0){
   // Keep both wrists within reach while following the weapon through a two-handed swing.
   for(let i=0;i<12;i++){support=new THREE.Vector3(...supportGrip).applyEuler(rotation).add(rightArm.hand.position).add(rightArm.position);const reach=support.clone().sub(leftArm.position),excess=reach.length()-.385;if(excess<=.0001)break;
    const target=rightArm.hand.position.clone().add(rightArm.position).addScaledVector(reach.normalize(),-excess);poseArm(rightArm,target,rotation);
-  }support=new THREE.Vector3(...supportGrip).applyEuler(rotation).add(rightArm.hand.position).add(rightArm.position);poseArm(leftArm,support,new THREE.Euler());
+  }support=new THREE.Vector3(...supportGrip).applyEuler(rotation).add(rightArm.hand.position).add(rightArm.position);poseArm(leftArm,support,rotation);
  }
  if(shot){motion.body[0]-=recoil*2;motion.drop=-recoil*.25;motion.shift[1]-=recoil*.6;}
  return motion;
 }
-function updateTrails(ref,u,time){
+function updateTrails(ref,u,time,motionName){
  const attack=u.attack||u.motion,active=!u.dead&&u.down<=0&&!u.guard&&!!attack&&(!attack.weapon||attack.weapon===ref.kind);
  ref.root.updateMatrixWorld(true);
- for(const trail of ref.weaponTrails||[]){const p=attack?attack.elapsed/attack.duration:0,rhythm=motionRhythm(ref.kind,attack||{});
-  if(active&&p>=rhythm.windup&&p<=rhythm.contactEnd+.08&&trail.samples.at(-1)?.time!==time){const tip=ref.root.worldToLocal(trail.weapon.localToWorld(new THREE.Vector3(...trail.weapon.userData.trailTip))),base=ref.root.worldToLocal(trail.weapon.localToWorld(new THREE.Vector3(...trail.weapon.userData.trailBase)));trail.samples.push({tip,base,time});}
+ for(const trail of ref.weaponTrails||[]){const p=attack?attack.elapsed/attack.duration:0,rhythm=motionRhythm(ref.kind,attack||{}),left=trail.weapon.parent===ref.arms[1].hand;
+  const striking=ref.kind==='knuckle'?left===['jabLeft','bodyLeft'].includes(motionName):ref.kind==='dualSword'&&['rightCut','leftReturn','rightDiagonal','leftDiagonal'].includes(motionName)?left===['leftReturn','leftDiagonal'].includes(motionName):true;
+  if(active&&striking&&p>=rhythm.windup&&p<=rhythm.contactEnd+.08&&trail.samples.at(-1)?.time!==time){const tip=ref.root.worldToLocal(trail.weapon.localToWorld(new THREE.Vector3(...trail.weapon.userData.trailTip))),base=ref.root.worldToLocal(trail.weapon.localToWorld(new THREE.Vector3(...trail.weapon.userData.trailBase)));trail.samples.push({tip,base,time});}
   trail.samples=trail.samples.filter(s=>time-s.time<.12).slice(-12);const vertices=trail.mesh.geometry.attributes.position.array;let offset=0;
   for(let i=1;i<trail.samples.length;i++){const a=trail.samples[i-1],b=trail.samples[i];for(const v of [a.base,a.tip,b.tip,a.base,b.tip,b.base]){vertices[offset++]=v.x;vertices[offset++]=v.y;vertices[offset++]=v.z;}}
   trail.mesh.geometry.attributes.position.needsUpdate=true;trail.mesh.geometry.setDrawRange(0,offset/3);trail.mesh.visible=offset>0;
@@ -163,7 +166,7 @@ export class ArenaRenderer{
    else if(!u.attack&&!u.motion&&speed>.2){const phase=stride*(i?1:-1);foot.z+=phase*.11;foot.y+=Math.max(0,phase)*.06;}
    foot.sub(ref.legGroup.position).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw);poseLeg(leg,foot);leg.foot.rotation.y=(motion.footYaw[i]||0)-hipYaw;
   }
-  ref.head.rotation.y=canPose?-motion.body[1]*.28:0;ref.head.rotation.x=canPose?-motion.body[0]*.20:0;ref.ring.material.opacity=u.buffTime>0?.85:.45;updateTrails(ref,u,time);
+  ref.head.rotation.y=canPose?-motion.body[1]*.28:0;ref.head.rotation.x=canPose?-motion.body[0]*.20:0;ref.ring.material.opacity=u.buffTime>0?.85:.45;updateTrails(ref,u,time,motion.name);
  }
 
  event(e){if(!['hit','explosion','dash','buff','kill','spark','special','jump'].includes(e.type))return;const unit=this.robots.get(e.unit);const pos=e.x!==undefined?new THREE.Vector3(e.x,e.y||.05,e.z):unit?unit.root.position.clone():new THREE.Vector3();const color=e.type==='hit'?(e.crit?'#ffd48b':'#96ffe4'):e.type==='explosion'?'#ffae6f':'#67efdb';const radius=e.radius|| (e.type==='special'?.9:e.type==='kill'?.6:.2);const mesh=new THREE.Mesh(new THREE.RingGeometry(radius*.6,radius,24),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.85,side:THREE.DoubleSide}));mesh.position.copy(pos);if(e.type!=='hit')mesh.rotation.x=-Math.PI/2;else mesh.quaternion.copy(this.camera.quaternion);this.effects.add(mesh);this.fx.push({mesh,age:0,duration:e.type==='explosion'?.55:.3,radius});}

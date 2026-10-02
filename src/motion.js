@@ -3,14 +3,14 @@ import * as THREE from '../vendor/three.module.min.js';
 // Weapon counts/intervals remain our game specification, not measurements of the videos.
 export const COMBO_CLIPS={
  sword:['slashOut','slashBack','rising','overhead'],
- rapier:['thrust','highThrust','thrust','lowThrust','lunge'],
- dualSword:['crossOut','crossBack','rising','crossOut','crossBack','crossFinish'],
+ rapier:['thrust','highThrust','insideThrust','lowThrust','lunge'],
+ dualSword:['rightCut','leftReturn','dualRise','rightDiagonal','leftDiagonal','crossFinish'],
  lance:['lowThrust','highThrust','lunge'],
- naginata:['sweep','sweepBack','spin'],
- knuckle:['jabRight','jabLeft','jabRight','jabLeft','hook','uppercut'],
+ naginata:['sweep','sweepBack','poleDiagonal'],
+ knuckle:['jabRight','jabLeft','bodyRight','bodyLeft','hook','uppercut'],
  dagger:['slashBack','slashOut','thrust','rising','retreatCut'],
  hammer:['hammerSweep','hammerSlam'],
- scythe:['sweepBack','sweep','spin'],
+ scythe:['sweepBack','sweep','hookDraw'],
 };
 // Fractions of the existing attack interval; heavy weapons spend more time preparing.
 const RHYTHMS={
@@ -40,7 +40,7 @@ export function motionRhythm(kind,attack={}){
 }
 export function contactPhase(attack){const r=motionRhythm(attack.weapon,attack);return clamp((attack.elapsed/attack.duration-r.windup)/(r.contactEnd-r.windup));}
 export function stepPhase(attack){const r=motionRhythm(attack.weapon,attack);const start=['rapier','lance'].includes(attack.weapon)?r.windup*1.15:r.windup*.5;return smooth((attack.elapsed/attack.duration-start)/(r.contactEnd-start));}
-export function swingDirection(kind,stage){return ['slashBack','crossBack','retreatCut','sweepBack'].includes(comboClip(kind,stage))?-1:1;}
+export function swingDirection(kind,stage){return ['slashBack','crossBack','retreatCut','sweepBack','leftReturn','leftDiagonal'].includes(comboClip(kind,stage))?-1:1;}
 export function readyPose(kind,side){
  const dual=['dualSword','dualGun','knuckle'].includes(kind),twoHand=['hammer','naginata','scythe'].includes(kind),ranged=!COMBO_CLIPS[kind];
  if(ranged&&(side===-1||dual))return pose([dual?side*.24:['pistol','machinegun','shotgun'].includes(kind)?-.24:-.065,dual||['pistol','machinegun','shotgun'].includes(kind)?.52:.49,.18],[0,0,0]);
@@ -56,14 +56,34 @@ function clipPoses(name,kind){
  if(['slashBack','crossBack','retreatCut','sweepBack'].includes(name)){prepare=pose([.02,.48,.25],[1.40,0,-.7]);strike=pose([-.31,.50,.25],[1.25,0,.75]);follow=pose([-.31,.46,.14],[.85,0,.7]);control=[-.12,.59,.35];body=[.04,-.42,.015];}
  if(['rising','uppercut'].includes(name)){prepare=pose([-.27,.36,.19],[2.05,0,.35]);strike=pose([-.22,.66,.27],[.35,0,.3]);follow=pose([-.25,.59,.18],[.2,0,.3]);control=[-.26,.43,.38];body=[-.045,.20,-.015];}
  if(['overhead','hammerSlam'].includes(name)){prepare=pose(twoHand?[-.05,.78,.07]:[-.23,.77,.10],[-.18,0,twoHand?.1:.2]);strike=pose(twoHand?[-.03,.43,.34]:[-.23,.43,.33],[2.10,0,.1]);follow=pose(twoHand?[-.04,.39,.23]:[-.25,.39,.22],[2.18,0,.1]);control=twoHand?[-.04,.71,.40]:[-.22,.68,.41];body=[.16,.025,0];}
- if(['thrust','highThrust','lowThrust','lunge'].includes(name)){const h=name==='highThrust'?.57:name==='lowThrust'?.42:.49;prepare=pose([-.27,h,.13],[Math.PI/2,0,.02]);strike=pose([-.19,h,.36],[Math.PI/2,0,-.02]);follow=pose([-.22,h,.29],[Math.PI/2,0,0]);control=[-.24,h,.30];body=[.025,.04,0];}
+ if(['thrust','highThrust','insideThrust','lowThrust','lunge'].includes(name)){const h=name==='highThrust'?.63:name==='lowThrust'?.43:name==='insideThrust'?.55:.52,inside=name==='insideThrust';prepare=pose([-.27,h,.13],[Math.PI/2,inside?-.18:0,.02]);strike=pose([inside?-.12:-.19,h,name==='lunge'?.38:.36],[Math.PI/2,inside?.16:0,-.02]);follow=pose([inside?-.18:-.23,h,.24],[Math.PI/2,inside?.08:0,0]);control=[inside?-.18:-.24,h,.30];body=[.025,inside?.12:name==='lunge'?.07:.04,0];}
  if(['sweep','sweepBack','hammerSweep','spin'].includes(name)){const sign=name==='sweepBack'?-1:1;prepare=pose([-.06,.57,.11],[.75,0,sign*-.95]);strike=pose([.03,.49,.30],[1.25,0,sign*.95]);follow=pose([.04,.45,.22],[1.45,0,sign*1.1]);control=[-.04,.57,.38];body=[.075,sign*.48,-sign*.02];}
+ if(kind==='sword'&&name==='slashOut'){prepare=pose([-.30,.69,.06],[.05,0,.62]);strike=pose([.04,.50,.34],[1.30,0,-.66]);follow=pose([.07,.45,.21],[1.62,0,-.82]);control=[-.23,.66,.41];body=[.065,.46,-.02];}
+ if(kind==='sword'&&name==='slashBack'){prepare=pose([.03,.47,.25],[1.62,0,-.70]);strike=pose([-.31,.62,.27],[.95,0,.72]);follow=pose([-.32,.57,.13],[.65,0,.76]);control=[-.10,.61,.39];body=[.035,-.42,.015];}
+ // Each two-handed tool has its own path; keep the shaft in front of the torso.
+ if(kind==='hammer'&&name==='hammerSweep'){prepare=pose([-.13,.62,.10],[.60,-.18,-.95]);strike=pose([.06,.50,.28],[1.18,.16,1.02]);follow=pose([.08,.44,.19],[1.45,.22,1.18]);control=[-.04,.60,.39];body=[.09,.57,-.025];}
+ if(kind==='hammer'&&name==='hammerSlam'){prepare=pose([-.05,.82,.10],[-.45,0,.08]);strike=pose([-.03,.47,.34],[1.94,0,.06]);follow=pose([-.05,.45,.24],[1.98,0,.06]);control=[-.04,.75,.41];body=[.14,.02,0];}
+ if(kind==='naginata'&&['sweep','sweepBack','poleDiagonal'].includes(name)){
+  const back=name==='sweepBack';prepare=pose([-.05,back?.48:.64,.17],[back?1.40:.68,back?.12:-.12,back?.94:-.90]);strike=pose([.02,back?.62:.48,.29],[back?.80:1.30,back?-.12:.12,back?-.88:.96]);follow=pose([.02,back?.60:.44,.21],[back?.68:1.45,back?-.16:.16,back?-.98:1.10]);control=[-.07,.66,.37];body=[.055,back?-.46:.46,back?.02:-.02];
+  if(name==='poleDiagonal'){prepare=pose([-.07,.78,.12],[.12,-.08,-.55]);strike=pose([.05,.46,.32],[1.70,.12,.64]);follow=pose([.06,.43,.22],[1.86,.16,.74]);control=[-.03,.70,.40];body=[.10,.32,-.02];}
+ }
+ if(kind==='scythe'&&['sweepBack','sweep','hookDraw'].includes(name)){
+  const back=name==='sweepBack';prepare=pose([-.05,back?.48:.60,.17],[back?1.30:.85,back?.22:-.22,back?.85:-.80]);strike=pose([.04,back?.58:.48,.28],[back?.92:1.34,back?-.18:.18,back?-.90:.90]);follow=pose([-.04,back?.54:.43,.15],[back?.80:1.50,back?-.28:.28,back?-.95:1.05]);control=[-.03,.57,.40];body=[.075,back?-.42:.42,0];
+  if(name==='hookDraw'){prepare=pose([-.06,.67,.16],[.62,-.30,-.62]);strike=pose([.03,.53,.34],[1.20,.25,.75]);follow=pose([-.09,.48,.13],[1.42,.35,.92]);control=[-.01,.62,.41];body=[.08,.50,-.025];}
+ }
+ if(kind==='dagger'&&name==='retreatCut'){prepare=pose([.01,.49,.23],[1.35,0,-.62]);strike=pose([-.29,.54,.27],[1.12,.12,.80]);follow=pose([-.30,.51,.10],[.65,.15,.72]);control=[-.08,.60,.36];body=[-.025,-.32,.015];}
  let leftPrepare=left,leftStrike=left,leftFollow=left,leftControl=left.position;
- if(kind==='dualSword'){const mirror=p=>pose(p.position.map((x,i)=>i===0?-x:x),p.rotation.map((x,i)=>i===2?-x:x));leftPrepare=mirror(prepare);leftStrike=mirror(strike);leftFollow=mirror(follow);leftControl=control.map((x,i)=>i===0?-x:x);}
+ if(kind==='dualSword'&&name==='overhead'){const mirror=p=>pose(p.position.map((x,i)=>i===0?-x:x),p.rotation.map((x,i)=>i===2?-x:x));leftPrepare=mirror(prepare);leftStrike=mirror(strike);leftFollow=mirror(follow);leftControl=control.map((x,i)=>i===0?-x:x);}
+ if(kind==='dualSword'&&COMBO_CLIPS.dualSword.includes(name)){
+  const guardR=pose([-.26,.52,.14],[.28,0,.35]),guardL=pose([.26,.52,.14],[.28,0,-.35]),mirror=p=>pose(p.position.map((x,i)=>i===0?-x:x),p.rotation.map((x,i)=>i===2?-x:x));
+  prepare=pose([-.30,name==='rightDiagonal'?.73:.62,.10],[name==='rightDiagonal'?-.12:.22,0,.65]);strike=pose([-.04,name==='rightDiagonal'?.43:.52,.34],[name==='rightDiagonal'?1.80:1.30,0,-.68]);follow=pose([.02,.44,.22],[1.65,0,-.80]);control=[-.24,.65,.40];body=[.065,.38,-.015];leftPrepare=guardL;leftStrike=guardL;leftFollow=guardL;leftControl=guardL.position;
+  if(name==='leftReturn'||name==='leftDiagonal'){leftPrepare=pose([.30,name==='leftDiagonal'?.74:.62,.10],[name==='leftDiagonal'?-.10:.22,0,-.65]);leftStrike=pose([.04,name==='leftDiagonal'?.44:.55,.34],[name==='leftDiagonal'?1.76:1.25,0,.68]);leftFollow=pose([-.02,.46,.22],[1.62,0,.80]);leftControl=[.24,.66,.40];prepare=guardR;strike=guardR;follow=guardR;control=guardR.position;body=[.065,-.38,.015];}
+  if(name==='dualRise'){prepare=pose([-.29,.36,.20],[2.05,0,.42]);strike=pose([-.18,.70,.30],[.28,0,.28]);follow=pose([-.24,.62,.18],[.20,0,.32]);control=[-.27,.49,.40];leftPrepare=mirror(prepare);leftStrike=mirror(strike);leftFollow=mirror(follow);leftControl=[.27,.49,.40];body=[-.04,.12,0];}
+ }
  if(kind==='knuckle'){
-  const leftPunch=name==='jabLeft',upper=name==='uppercut';prepare=readyPose(kind,-1);strike=pose([-.18,upper?.78:.68,.36],[upper?.28:0,0,upper?0:.25]);follow=pose([-.20,.68,.20],[0,0,0]);control=upper?[-.24,.48,.31]:[-.20,.68,.28];body=[upper?-.025:.025,leftPunch?-.16:.29,0];
+  const leftPunch=name==='jabLeft'||name==='bodyLeft',upper=name==='uppercut',low=name==='bodyRight'||name==='bodyLeft',h=low?.53:.68;prepare=readyPose(kind,-1);strike=pose([-.18,upper?.78:h,.38],[upper?.28:0,0,upper?0:.25]);follow=pose([-.20,.68,.20],[0,0,0]);control=upper?[-.24,.48,.31]:[-.20,h,.30];body=[upper?-.025:low?.105:.025,leftPunch?-.16:low?.36:.29,0];
   if(upper)prepare=pose([-.25,.44,.18],[.3,0,0]);
-  if(leftPunch){leftPrepare=left;leftStrike=pose([.18,.68,.36],[0,0,-.25]);leftFollow=pose([.20,.68,.20],[0,0,0]);leftControl=[.20,.68,.28];prepare=readyPose(kind,-1);strike=prepare;follow=prepare;control=prepare.position;}
+  if(leftPunch){leftPrepare=left;leftStrike=pose([.18,h,.38],[0,0,-.25]);leftFollow=pose([.20,.68,.20],[0,0,0]);leftControl=[.20,h,.30];prepare=readyPose(kind,-1);strike=prepare;follow=prepare;control=prepare.position;}
   if(name==='hook'){prepare=pose([-.24,.68,.17],[0,0,.1]);strike=pose([-.04,.68,.31],[0,0,-.65]);follow=pose([-.18,.68,.24],[0,0,-.25]);control=[-.34,.69,.31];body[1]=.38;}
  }
  if(name==='crossFinish'){prepare=pose([-.28,.72,.10],[.1,0,.55]);strike=pose([-.11,.45,.32],[1.9,0,-.6]);follow=pose([-.16,.41,.22],[2.1,0,-.4]);control=[-.27,.67,.39];leftPrepare=pose([.28,.72,.10],[.1,0,-.55]);leftStrike=pose([.11,.45,.32],[1.9,0,.6]);leftFollow=pose([.16,.41,.22],[2.1,0,.4]);leftControl=[.27,.67,.39];body=[.12,0,0];}
@@ -76,8 +96,8 @@ function readyFrame(kind){
 function blendFrame(a,b,t){return {right:blendPose(a.right,b.right,t),left:blendPose(a.left,b.left,t),body:blend(a.body,b.body,t),drop:mix(a.drop,b.drop,t),shift:blend(a.shift,b.shift,t),feet:a.feet.map((v,i)=>blend(v,b.feet[i],t)),footYaw:blend(a.footYaw,b.footYaw,t),hipYaw:mix(a.hipYaw,b.hipYaw,t),weight:mix(a.weight,b.weight,t)};}
 function frames(kind,name){
  const c=clipPoses(name,kind),base=readyFrame(kind),punch=kind==='knuckle',lead=punch?1:0,heavy=kind==='hammer',thrust=['rapier','lance'].includes(kind),upper=name==='uppercut';
- const prepare={...base,right:c.prepare,left:c.leftPrepare,body:c.body.map((x,i)=>x*(i===1?-.5:-.35)),drop:heavy||upper?-.035:-.012,shift:[0,-.008],weight:.45,hipYaw:-c.body[1]*.15};
- const strike={...base,right:c.strike,left:c.leftStrike,body:c.body,drop:upper?-.005:heavy||thrust?-.03:-.012,shift:[0,punch?.018:.025],weight:1,hipYaw:c.body[1]*.38,
+ const lunge=name==='lunge',lowPunch=name==='bodyRight'||name==='bodyLeft',prepare={...base,right:c.prepare,left:c.leftPrepare,body:c.body.map((x,i)=>x*(i===1?-.5:-.35)),drop:heavy||upper||lowPunch?-.035:-.012,shift:[0,-.008],weight:.45,hipYaw:-c.body[1]*.15};
+ const strike={...base,right:c.strike,left:c.leftStrike,body:c.body,drop:upper?-.005:lowPunch||lunge?-.045:heavy||thrust?-.03:-.012,shift:[0,punch?.018:lunge?.045:.025],weight:1,hipYaw:c.body[1]*.38,
   feet:base.feet.map((v,i)=>[v[0],v[1]+(punch&&i===0?.008:0),v[2]+(punch?0:i===lead?.075:-.015)]),footYaw:punch?[Math.max(0,c.body[1])*.7,Math.min(0,c.body[1])*.4]:[c.body[1]*.18,c.body[1]*.4]};
  const follow={...strike,right:c.follow,left:c.leftFollow,body:c.body.map(x=>x*.65),hipYaw:c.body[1]*.25,weight:.55,feet:strike.feet.map(v=>[v[0],.035,v[2]])};
  return {prepare,strike,follow,control:c.control,leftControl:c.leftControl};
@@ -88,9 +108,9 @@ export function sampleMotion(kind,attack,{nextCombo=null}={}){
  const name=clipName(kind,attack),c=frames(kind,name),r=motionRhythm(kind,attack),p=clamp(attack.elapsed/attack.duration),start=attack.blendFrom||base;
  let out;
  if(p<r.windup)out=blendFrame(start,c.prepare,smooth(p/r.windup));
- else if(p<r.contactEnd){const t=(p-r.windup)/(r.contactEnd-r.windup),drive=1-(1-clamp(t))**2;out=blendFrame(c.prepare,c.strike,drive);
+ else if(p<r.contactEnd){const t=(p-r.windup)/(r.contactEnd-r.windup),drive=smooth(t);out=blendFrame(c.prepare,c.strike,drive);
   out.right=curvePose(c.prepare.right,c.control,c.strike.right,drive);out.left=curvePose(c.prepare.left,c.leftControl,c.strike.left,drive);
-  if(kind==='dualSword'){const delayed=1-(1-clamp((t-.10)/.90))**2,hand=(attack.combo||0)%2?'right':'left';out[hand]=curvePose(c.prepare[hand],hand==='right'?c.control:c.leftControl,c.strike[hand],delayed);}
+  if(kind==='dualSword'&&['dualRise','crossFinish'].includes(name)){const delayed=smooth((t-.10)/.90);out.left=curvePose(c.prepare.left,c.leftControl,c.strike.left,delayed);}
   if(kind!=='knuckle')out.feet[0][1]+=.018*Math.sin(Math.PI*t);
  }else if(p<r.follow)out=blendFrame(c.strike,c.follow,smooth((p-r.contactEnd)/(r.follow-r.contactEnd)));
  else {const destination=nextCombo===null?base:blendFrame(base,frames(kind,comboClip(kind,nextCombo)).prepare,.82);out=blendFrame(c.follow,destination,smooth((p-r.follow)/(1-r.follow)));}

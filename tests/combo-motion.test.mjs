@@ -31,9 +31,44 @@ test('チャージ・長押し連射を保持し、ポーズ中は先行入力�
 test('コンボ段数は確定値と一致し、各段の軌跡が異なり、動作端で構えへ戻る',()=>{
  for(const [kind,clips]of Object.entries(COMBO_CLIPS)){
   assert.equal(clips.length,WEAPONS[kind].combo);const samples=new Set();
-  for(let combo=0;combo<clips.length;combo++){const zero=sampleMotion(kind,{combo,elapsed:0,duration:1}),end=sampleMotion(kind,{combo,elapsed:1,duration:1});assert.deepEqual(zero.right,end.right);assert.deepEqual(zero.left,end.left);samples.add(JSON.stringify(sampleMotion(kind,{combo,elapsed:.5,duration:1})));}
-  assert(samples.size>=2,`${kind}が毎段同じモーションになる`);
+  for(let combo=0;combo<clips.length;combo++){const zero=sampleMotion(kind,{combo,elapsed:0,duration:1}),end=sampleMotion(kind,{combo,elapsed:1,duration:1});assert.deepEqual(zero.right,end.right);assert.deepEqual(zero.left,end.left);const p=sampleMotion(kind,{combo,elapsed:.5,duration:1});samples.add(JSON.stringify([p.right,p.left,p.body,p.drop,p.shift]));}
+  assert.equal(samples.size,clips.length,`${kind}の通常コンボに同じ動作が残る`);
  }
+});
+
+test('二刀流の片腕斬撃は反対の剣を構えに残し、上段・下段パンチの狙いを分ける',()=>{
+ const attack={duration:1,elapsed:motionRhythm('dualSword').contactEnd};
+ for(const [combo,guard]of [[0,'left'],[1,'right'],[3,'left'],[4,'right']]){
+  const p=sampleMotion('dualSword',{...attack,combo}),armed=guard==='left'?'right':'left';assert(p[guard].position[2]<.20);assert(p[armed].position[2]>.30);
+ }
+ for(const [high,low,hand]of [[0,2,'right'],[1,3,'left']]){
+  const at={duration:1,elapsed:motionRhythm('knuckle').contactEnd};assert(sampleMotion('knuckle',{...at,combo:high})[hand].position[1]-sampleMotion('knuckle',{...at,combo:low})[hand].position[1]>.10);
+ }
+});
+
+test('左右連打の軌跡は振る側だけに付き、既存のチャージ動作を通常斬撃で置き換えない',()=>{
+ for(const [kind,combo,left]of [['dualSword',0,false],['dualSword',1,true],['knuckle',0,false],['knuckle',3,true]]){
+  const b=battle(kind),u=b.human,ref=createRobot(u.config,id=>CATALOG[id]);ref.active=0;u.attack={weapon:kind,combo,duration:1,elapsed:.2};ArenaRenderer.prototype.animateRobot.call({},ref,u,1);u.attack.elapsed=.3;ArenaRenderer.prototype.animateRobot.call({},ref,u,1.05);
+  for(const trail of ref.weaponTrails)assert.equal(trail.samples.length>0,trail.weapon.parent===ref.arms[1].hand?left:!left);
+ }
+ for(const kind of ['dualSword','naginata','scythe']){
+  const attack={combo:0,duration:1,elapsed:.5},normal=sampleMotion(kind,attack),charged=sampleMotion(kind,{...attack,charge:1});assert.notDeepEqual(normal.right,charged.right);assert.equal(charged.name,kind==='dualSword'?'overhead':'hammerSlam');
+ }
+});
+
+test('両手武器の支持手の向きが柄に追従し、射撃反動が武器ごとに変わって構えへ戻る',()=>{
+ for(const kind of ['hammer','naginata','scythe','rifle','sniper']){
+  const b=battle(kind),u=b.human,ref=createRobot(u.config,id=>CATALOG[id]);ref.active=0;
+  u.attack=WEAPONS[kind].ranged?null:{weapon:kind,combo:0,elapsed:.4,duration:1};u.motion=WEAPONS[kind].ranged?{weapon:kind,elapsed:.04,duration:.16}:null;ArenaRenderer.prototype.animateRobot.call({},ref,u,0);
+  assert(ref.arms[0].hand.quaternion.angleTo(ref.arms[1].hand.quaternion)<1e-7,`${kind}: 支持手が柄の向きに追従する`);
+ }
+ const kicks={};
+ for(const kind of ['pistol','machinegun','sniper','bazooka','dualGun']){
+  const b=battle(kind),u=b.human,ref=createRobot(u.config,id=>CATALOG[id]);ref.active=0;ArenaRenderer.prototype.animateRobot.call({},ref,u,0);const base=ref.arms[0].hand.position.clone();
+  u.motion={weapon:kind,elapsed:.24,duration:1};ArenaRenderer.prototype.animateRobot.call({},ref,u,0);kicks[kind]=ref.arms[0].hand.position.distanceTo(base);assert(kicks[kind]>.005);
+  u.motion.elapsed=1;ArenaRenderer.prototype.animateRobot.call({},ref,u,0);assert(ref.arms[0].hand.position.distanceTo(base)<1e-8);
+ }
+ assert(kicks.sniper>kicks.machinegun*2);assert(kicks.bazooka>kicks.pistol);
 });
 test('全近接の各段・全位相で関節と両手の支持が保たれる',()=>{
  for(const [kind,clips]of Object.entries(COMBO_CLIPS)){
