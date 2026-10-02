@@ -48,6 +48,25 @@ await motionPage.evaluate(async()=>{
   for(const {ref,battle,x}of models){r.animateRobot(ref,{...battle.human,x,z:0},battle.time);ref.ring.visible=false;}requestAnimationFrame(animate);
  }requestAnimationFrame(animate);
 });await motionPage.waitForTimeout(8200);await motionPage.screenshot({path:'artifacts/combo-motion.png'});const video=motionPage.video();await motionPage.close();await video.saveAs('artifacts/combo-motion.webm');
+// Verify visible poise and a real slow/fast exchange, using the game's normal fixed-step loop.
+const duelPage=await browser.newPage({viewport:{width:1100,height:680},recordVideo:{dir:'artifacts',size:{width:1100,height:680}}});duelPage.on('pageerror',e=>errors.push(e.message));
+await duelPage.goto('http://127.0.0.1:4173');await duelPage.locator('.home-copy').waitFor();
+await duelPage.evaluate(async()=>{
+ const [{app},{defaultConfig}]=await Promise.all([import('/src/main.js'),import('/src/customize.js')]);
+ app.state.units[0]=defaultConfig();app.state.enemies[0]=defaultConfig();
+ for(const [c,kind]of [[app.state.units[0],'hammer'],[app.state.enemies[0],'knuckle']]){c.sets[0]={item:`weapon:${kind}`,shield:null};c.passives=[];c.abilities=[];}
+ Object.assign(app.state.setup,{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true});app.startBattle();
+ const b=app.battle;b.countdown=0;b.paused=true;b.training.infinite=true;b.ai=()=>({});b.rng=()=>.99;
+ b.entities.forEach((u,i)=>{Object.assign(u,{x:0,z:i*.8,yaw:i?Math.PI:0,target:b.entities[1-i].id,lp:10000});u.stats.lp=10000;});
+ b.attack(b.human);b.human.attack.elapsed=.12;b.human.motion.elapsed=.12;app.hudUpdate();
+ window.duelBraces=0;const emit=b.event.bind(b);b.event=(type,data)=>{if(type==='brace')window.duelBraces++;emit(type,data);};
+});
+assert((await duelPage.locator('.hud-weapon').innerText()).includes('踏ん張り 52 / 52'));await duelPage.waitForTimeout(150);await duelPage.screenshot({path:'artifacts/poise-hud.png'});
+await duelPage.evaluate(async()=>{const {app}=await import('/src/main.js');app.battle.paused=false;function attack(){for(const u of app.battle.entities)app.battle.attack(u);requestAnimationFrame(attack);}requestAnimationFrame(attack);});
+await duelPage.waitForTimeout(8200);
+const duelResult=await duelPage.evaluate(async()=>{const {app}=await import('/src/main.js');return {damage:app.battle.entities.map(u=>u.dealt),braces:window.duelBraces};});
+assert(duelResult.damage.every(d=>d>100),JSON.stringify(duelResult));assert(duelResult.braces>0);await duelPage.screenshot({path:'artifacts/slow-fast-battle.png'});
+const duelVideo=duelPage.video();await duelPage.close();await duelVideo.saveAs('artifacts/slow-fast-battle.webm');
 await page.locator('.nav [data-view="settings"]').click();
 const binding=(device,id,slot=0)=>page.locator(`[data-action="bindInput"][data-device="${device}"][data-id="${id}"][data-slot="${slot}"]`);
 await binding('keyboard','jump').click();await page.keyboard.press('KeyJ');await page.locator('#modal').waitFor({state:'hidden'});assert.equal(await binding('keyboard','jump').innerText(),'J');
@@ -76,5 +95,5 @@ await page.evaluate(async()=>{const {app}=await import('/src/main.js');for(const
 await page.reload();await page.locator('.home-copy').waitFor();assert.equal(await page.evaluate(async()=> (await import('/src/main.js')).app.state.records.wins),1);
 await page.setViewportSize({width:390,height:844});await page.screenshot({path:'artifacts/mobile-home.png'});await page.locator('.nav [data-view="custom"]').click();await page.locator('[data-action="customTab"][data-id="core"]').click();await page.screenshot({path:'artifacts/mobile-core.png'});
 await page.locator('.nav [data-view="settings"]').click();await page.locator('.content-scroll').evaluate(el=>el.scrollTop=0);assert(await page.locator('.setup-grid > .panel').first().evaluate(el=>el.getBoundingClientRect().right<=window.innerWidth));await page.screenshot({path:'artifacts/mobile-bindings.png'});await page.locator('[data-action="resetBindings"][data-device="keyboard"]').click();assert.equal(await binding('keyboard','jump').innerText(),'Space');
-assert.deepEqual(errors,[]);console.log('Browser smoke passed: WebGL, screens, 94 cells, 3v3, movement, pause, 88 rewards, persistent reload, remapped keyboard/mouse/gamepad input, reset/cancel and mobile layout.');
+assert.deepEqual(errors,[]);console.log('Browser smoke passed: WebGL, human-informed combo motion, poise HUD, slow/fast exchange '+JSON.stringify(duelResult)+', screens, 94 cells, 3v3, movement, pause, 88 rewards, persistent reload, remapped keyboard/mouse/gamepad input, reset/cancel and mobile layout.');
 }catch(e){console.error(e);if(browser){const pages=browser.contexts().flatMap(c=>c.pages());for(const p of pages){console.error('Page state:',await p.locator('body').innerText().catch(()=>''));await p.screenshot({path:'artifacts/failure.png'}).catch(()=>{});}}process.exitCode=1;}finally{await browser?.close();server.kill();}})();

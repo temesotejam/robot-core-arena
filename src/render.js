@@ -42,7 +42,7 @@ function weaponModel(kind,team){const group=new THREE.Group(),w=WEAPONS[kind],me
 const ARM_LENGTH=.195,DOWN=new THREE.Vector3(0,-1,0);
 function poseArm(arm,target,rotation){
  const wrist=target.clone().sub(arm.position),distance=Math.min(wrist.length(),ARM_LENGTH*2-.001);wrist.setLength(distance);
- const direction=wrist.clone().normalize(),pole=new THREE.Vector3(arm.userData.side,0,-.35);pole.addScaledVector(direction,-pole.dot(direction)).normalize();
+ const direction=wrist.clone().normalize(),pole=new THREE.Vector3(arm.userData.side*.35,-.8,-.35);pole.addScaledVector(direction,-pole.dot(direction));if(pole.lengthSq()<1e-8)pole.set(arm.userData.side,0,0);pole.normalize();
  const elbow=wrist.clone().multiplyScalar(.5).addScaledVector(pole,Math.sqrt(ARM_LENGTH**2-(distance/2)**2));
  arm.upper.quaternion.setFromUnitVectors(DOWN,elbow.clone().normalize());arm.elbow.position.copy(elbow);
  arm.lower.position.copy(elbow);arm.lower.quaternion.setFromUnitVectors(DOWN,wrist.clone().sub(elbow).normalize());
@@ -155,13 +155,13 @@ export class ArenaRenderer{
   if(ref.active!==u.active){ref.active=u.active;ref.changeWeapons(u.config.sets[u.active]);}
   const motion=poseWeapons(ref,u,time),canPose=!u.dead&&!(u.down>0),reaction=u.hitReaction,reactionWeight=reaction?Math.sin(Math.PI*Math.min(1,reaction.elapsed/reaction.duration)):0,relative=reaction?(reaction.yaw-u.yaw):0;
   ref.bodyPivot.rotation.set(u.dead?Math.PI/3:u.down>0?.9:motion.body[0]+(u.dashTime>0?.13:0)+Math.cos(relative)*(reaction?.strength||0)*reactionWeight,canPose?motion.body[1]:0,u.dead?.8:u.status==='stun'?Math.sin(time*30)*.03:canPose?motion.body[2]-Math.sin(relative)*(reaction?.strength||0)*reactionWeight:0);
-  const drop=canPose?motion.drop:0,shift=canPose?motion.shift:[0,0];ref.bodyPivot.position.set(shift[0],.36+drop,shift[1]);ref.legGroup.position.set(shift[0]*.5,drop,shift[1]*.6);
+  const drop=canPose?motion.drop:0,shift=canPose?motion.shift:[0,0];ref.bodyPivot.position.set(shift[0],.36+drop,shift[1]);ref.legGroup.position.set(shift[0]*.5,drop,shift[1]*.6);const hipYaw=canPose&&ref.legFrame!=='panzer'?motion.hipYaw:0;ref.legGroup.rotation.y=hipYaw;
   for(const [i,leg]of ref.feet.entries())if(leg.knee){
    const foot=new THREE.Vector3(...motion.feet[i]);
    if(!canPose)foot.set(leg.userData.side*.105,.035,.045);
    else if(!u.grounded){foot.y+=.075;foot.z-=.055;}
    else if(!u.attack&&!u.motion&&speed>.2){const phase=stride*(i?1:-1);foot.z+=phase*.11;foot.y+=Math.max(0,phase)*.06;}
-   foot.sub(ref.legGroup.position);poseLeg(leg,foot);
+   foot.sub(ref.legGroup.position).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw);poseLeg(leg,foot);leg.foot.rotation.y=(motion.footYaw[i]||0)-hipYaw;
   }
   ref.head.rotation.y=canPose?-motion.body[1]*.28:0;ref.head.rotation.x=canPose?-motion.body[0]*.20:0;ref.ring.material.opacity=u.buffTime>0?.85:.45;updateTrails(ref,u,time);
  }

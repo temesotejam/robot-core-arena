@@ -87,3 +87,22 @@ test('命中した方向へ被弾姿勢を付け、時間経過で消え、ポ�
  const ref=createRobot(v.config,id=>CATALOG[id]);ref.active=0;ArenaRenderer.prototype.animateRobot.call({},ref,v,b.time);assert(Math.hypot(ref.bodyPivot.rotation.x,ref.bodyPivot.rotation.z)>.01);
  const snapshot=JSON.stringify(v.hitReaction);b.paused=true;advance(b,.1);assert.equal(JSON.stringify(v.hitReaction),snapshot);b.paused=false;advance(b,.25);assert.equal(v.hitReaction,null);
 });
+
+test('パンチで足を毎回入れ替えず、反対の手を構えに残す',()=>{
+ const base=sampleMotion('knuckle',null);
+ for(let combo=0;combo<6;combo++)for(let i=0;i<=60;i++){
+  const p=sampleMotion('knuckle',{combo,elapsed:i/60,duration:1}),guard=combo===1||combo===3?'right':'left';
+  for(let foot=0;foot<2;foot++){assert.equal(p.feet[foot][0],base.feet[foot][0]);assert.equal(p.feet[foot][2],base.feet[foot][2]);assert(p.feet[foot][1]<=.043+1e-8);}
+  assert(new THREE.Vector3(...p[guard].position).distanceTo(new THREE.Vector3(...base[guard].position))<1e-8);assert(p.left.position[1]>=.54-1e-8||guard==='right');
+ }
+});
+test('全近接の手首が回転の折り返しで飛ばず、突きは胴を直立させる',()=>{
+ for(const [kind,clips]of Object.entries(COMBO_CLIPS))for(let combo=0;combo<clips.length;combo++)for(const hand of ['right','left']){
+  let previous=null;
+  for(let i=0;i<=240;i++){
+   const p=sampleMotion(kind,{combo,elapsed:i/240,duration:1}),q=new THREE.Quaternion().setFromEuler(new THREE.Euler(...p[hand].rotation));
+   if(previous)assert(previous.angleTo(q)<.15,`${kind} ${combo} ${hand}: 手首の向きが飛ぶ`);previous=q;
+   if(['rapier','lance'].includes(kind))assert(Math.abs(p.body[0])<.04,`${kind}: 突きで胴を倒しすぎる`);
+  }
+ }
+});
