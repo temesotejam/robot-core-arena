@@ -47,7 +47,7 @@ export class ArenaRenderer{
   for(const u of b.entities){const model=createRobot(u.config,b.getItem,u.team);model.active=0;this.world.add(model.root);this.robots.set(u.id,model);}this.cameraYaw=b.human.yaw;this.manualYaw=0;this.cameraPitch=.28;this.camera.position.set(b.human.x-Math.sin(this.cameraYaw)*5,3,b.human.z-Math.cos(this.cameraYaw)*5);this.lastObserved=null;}
  look(dx,dy){if(this.mode==='hangar')this.hangarAngle+=dx*.005;else {this.manualYaw-=dx*.003;this.cameraYaw-=dx*.003;this.cameraPitch=THREE.MathUtils.clamp(this.cameraPitch+dy*.002,-.05,.85);}}
  resetCamera(b){this.manualYaw=0;this.cameraYaw=b.observed.yaw;this.cameraPitch=.28;}
- movement(x,z){const yaw=this.cameraYaw;return {x:Math.sin(yaw)*z+Math.cos(yaw)*x,z:Math.cos(yaw)*z-Math.sin(yaw)*x};}
+ movement(x,z){const yaw=this.cameraYaw;return {x:Math.sin(yaw)*z-Math.cos(yaw)*x,z:Math.cos(yaw)*z+Math.sin(yaw)*x};}
  project(x,y,z){const v=new THREE.Vector3(x,y,z).project(this.camera);return {x:(v.x*.5+.5)*window.innerWidth,y:(-.5*v.y+.5)*window.innerHeight,visible:v.z<1&&v.z>-1&&Math.abs(v.x)<1.1&&Math.abs(v.y)<1.1};}
  orderedTargets(b){return b.enemiesOf(b.human).sort((a,c)=>{const p=this.project(a.x,a.y+.5,a.z),q=this.project(c.x,c.y+.5,c.z);return Math.abs(p.x-window.innerWidth/2)-Math.abs(q.x-window.innerWidth/2)||Math.hypot(a.x-b.human.x,a.z-b.human.z)-Math.hypot(c.x-b.human.x,c.z-b.human.z);});}
  screenTargets(b){return b.enemiesOf(b.human).sort((a,c)=>this.project(a.x,a.y+.5,a.z).x-this.project(c.x,c.y+.5,c.z).x);}
