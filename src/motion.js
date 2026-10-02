@@ -1,4 +1,5 @@
 import * as THREE from '../vendor/three.module.min.js';
+import {swordMotion} from './sword-motion.js';
 // Original procedural poses, informed by the two supplied gameplay videos.
 // Weapon counts/intervals remain our game specification, not measurements of the videos.
 export const COMBO_CLIPS={
@@ -104,6 +105,7 @@ function frames(kind,name){
 }
 function clipName(kind,attack){return attack.skill==='tech'&&['naginata','scythe'].includes(kind)?'spin':attack.charge>.5&&!['rapier','lance','knuckle'].includes(kind)?['hammer','naginata','scythe'].includes(kind)?'hammerSlam':'overhead':comboClip(kind,attack.combo||0);}
 export function sampleMotion(kind,attack,{nextCombo=null}={}){
+ if(kind==='sword'&&(!attack||!attack.charge&&!attack.skill))return swordMotion(attack,{nextCombo});
  const base=readyFrame(kind);if(!attack||!COMBO_CLIPS[kind])return {name:'ready',...base};
  const name=clipName(kind,attack),c=frames(kind,name),r=motionRhythm(kind,attack),p=clamp(attack.elapsed/attack.duration),start=attack.blendFrom||base;
  let out;

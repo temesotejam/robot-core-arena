@@ -1,6 +1,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import {FRAMES,WEAPONS} from './data.js';
 import {sampleMotion,readyPose,motionRhythm} from './motion.js';
+import {swordArm} from './sword-motion.js';
 const mats=new Map(),boxes=new Map(),armorGeometries=new Map(),plateGeometries=new Map();
 function material(color,emissive=false){const key=`${color}:${emissive}`;if(!mats.has(key))mats.set(key,new THREE.MeshStandardMaterial({color,metalness:emissive?.15:.55,roughness:emissive?.25:.42,emissive:emissive?color:'#000000',emissiveIntensity:emissive?1.6:0}));return mats.get(key);}
 function box(w,h,d,color,x=0,y=0,z=0){const key=`${w},${h},${d}`;if(!boxes.has(key))boxes.set(key,new THREE.BoxGeometry(w,h,d));const mesh=new THREE.Mesh(boxes.get(key),material(color));mesh.position.set(x,y,z);mesh.castShadow=true;mesh.receiveShadow=true;return mesh;}
@@ -41,12 +42,20 @@ function weaponModel(kind,team){const group=new THREE.Group(),w=WEAPONS[kind],me
 }
 const ARM_LENGTH=.195,DOWN=new THREE.Vector3(0,-1,0);
 function poseArm(arm,target,rotation){
+ arm.position.set(arm.userData.side*.24,.66,0);arm.shoulder.rotation.set(0,0,0);
  const wrist=target.clone().sub(arm.position),distance=Math.min(wrist.length(),ARM_LENGTH*2-.001);wrist.setLength(distance);
  const direction=wrist.clone().normalize(),pole=new THREE.Vector3(arm.userData.side*.35,-.8,-.35);pole.addScaledVector(direction,-pole.dot(direction));if(pole.lengthSq()<1e-8)pole.set(arm.userData.side,0,0);pole.normalize();
  const elbow=wrist.clone().multiplyScalar(.5).addScaledVector(pole,Math.sqrt(ARM_LENGTH**2-(distance/2)**2));
  arm.upper.quaternion.setFromUnitVectors(DOWN,elbow.clone().normalize());arm.elbow.position.copy(elbow);
  arm.lower.position.copy(elbow);arm.lower.quaternion.setFromUnitVectors(DOWN,wrist.clone().sub(elbow).normalize());
  arm.hand.position.copy(wrist);arm.hand.rotation.copy(rotation);
+}
+function poseSwordArm(arm,joint){
+ const f=swordArm(joint);arm.position.set(joint.side*.24+joint.clavicle[0],.66+joint.clavicle[1],joint.clavicle[2]);
+ arm.upper.quaternion.copy(f.upper);arm.elbow.position.copy(f.elbow);arm.lower.position.copy(f.elbow);arm.lower.quaternion.copy(f.lower);arm.hand.position.copy(f.wrist);arm.hand.quaternion.copy(f.hand);
+ // Floating shoulder armour follows the raised upper arm without rotating the
+ // shoulder joint itself or pushing the elbow out to satisfy a wrist target.
+ arm.shoulder.quaternion.identity().slerp(f.upper,.42);
 }
 const THIGH=.155,SHIN=.17;
 function poseLeg(leg,target){
@@ -63,6 +72,7 @@ function poseWeapons(ref,u=null,time=0){
  const pulse=p=>{if(p<=0||p>=1)return 0;const t=p<.24?p/.24:1-(p-.24)/.76;return t*t*(3-2*t);},recoil=shot?pulse(shotProgress)*kick(w.id):0;
  for(const weapon of ref.weaponAttachments)if(weapon.userData.flash)weapon.userData.flash.visible=!!shot&&shotProgress<.3&&!u.dead&&!u.guard;
  for(const [i,arm]of ref.arms.entries()){
+  if(motion.joints&&!u?.guard&&!u?.charging&&!u?.dead&&!(u?.down>0)){poseSwordArm(arm,motion.joints[i?'left':'right']);continue;}
   const side=arm.userData.side,armed=i===0||dual,p=armed&&!w.ranged?(i?motion.left:motion.right):readyPose(w.id,side),target=new THREE.Vector3(...p.position),rotation=new THREE.Euler(...p.rotation);
   if(armed&&w.ranged){const handRecoil=w.id==='dualGun'&&i===1?pulse((shotProgress-.12)/.88)*kick(w.id):recoil;target.z-=handRecoil;target.y+=handRecoil*.22;rotation.x=-handRecoil*(['pistol','shotgun','dualGun'].includes(w.id)?3.2:1.4);}
   if(!attack&&!w.ranged&&speed>.2){target.z+=Math.sin(time*12)*(i?-1:1)*.025;}
@@ -99,7 +109,7 @@ export function createRobot(config,getItem,team=0){const root=new THREE.Group(),
  bodyRig.add(plate([[-wide,.12],[-wide*.9,.16],[wide*.9,.16],[wide,.12],[wide*.72,-.06],[wide*.46,-.12],[-wide*.46,-.12],[-wide*.72,-.06]],.22,bodyColor,0,.575,0),armor(.13,.11,.15,'#273644',0,.39,0),glow(.075,.032,.028,teamColor,0,.61,.135));
  const chest=plate([[-wide*.95,.06],[wide*.95,.06],[wide*.73,-.035],[0,-.075],[-wide*.73,-.035]],.045,bodyAccent,0,.66,.13);chest.rotation.x=-.14;bodyRig.add(chest,cylinder(.04,.065,'#253b48',0,.755,0),armor(.15,.19,.085,'#344b5b',0,.58,-.16));
  for(const side of [-1,1]){
-  const skirt=plate([[-.047,.05],[.047,.05],[.063,-.075],[-.057,-.058]],.055,bodyColor,side*.105,.35,.095);skirt.rotation.z=side*.16;bodyRig.add(skirt);
+  const skirt=plate([[-.047,.05],[.047,.05],[.063,-.075],[-.057,-.058]],.055,bodyColor,side*.105,.35,.095);skirt.rotation.z=side*.16;skirt.name='pelvisArmour';bodyRig.add(skirt);
   const nozzle=cylinder(.032,.075,'#253b48',side*.06,.50,-.17);nozzle.rotation.x=Math.PI/2;bodyRig.add(nozzle,glow(.026,.035,.012,bodyAccent,side*.06,.50,-.212));
   for(let j=0;j<3;j++)bodyRig.add(box(.058,.01,.012,'#142732',side*.092,.56-j*.021,.114));
   if(frame==='strider'){const fin=plate([[-.02,-.10],[.035,-.04],[.05,.16],[-.015,.065]],.055,bodyAccent,side*.15,.57,-.16);fin.rotation.z=-side*.30;bodyRig.add(fin);}
@@ -114,11 +124,12 @@ export function createRobot(config,getItem,team=0){const root=new THREE.Group(),
  if(headFrame==='wild')for(const side of [-1,1]){const ear=plate([[-.03,-.04],[.03,-.04],[.026,.11],[0,.17]],.05,headAccent,side*.075,.075,-.035);ear.rotation.z=-side*.3;head.add(ear);}
  if(headFrame==='brawler')head.add(armor(.245,.035,.195,headAccent,0,.06,.002));if(headFrame==='panzer')head.add(armor(.20,.045,.17,'#364451',0,.10,0));bodyRig.add(head);refs.head=head;
  for(const [n,p]of ['rightArm','leftArm'].entries()){const side=n===0?-1:1,[color,accent]=colors(p),frame=item(p).frame,arm=new THREE.Group();arm.position.set(side*.24,.66,0);arm.userData.side=side;
-  const sw=frame==='brawler'?.115:frame==='panzer'?.105:frame==='strider'?.065:.09;arm.add(plate([[-sw,.05],[-sw*.75,.09],[sw*.75,.09],[sw,.05],[sw*.8,-.065],[-sw*.55,-.055]],.18,color,0,.015,0),armor(sw*1.3,.025,.19,accent,0,.057,0));
+  const sw=frame==='brawler'?.115:frame==='panzer'?.105:frame==='strider'?.065:.09;arm.shoulder=new THREE.Group();arm.shoulder.add(plate([[-sw,.05],[-sw*.75,.09],[sw*.75,.09],[sw,.05],[sw*.8,-.065],[-sw*.55,-.055]],.18,color,0,.015,0),armor(sw*1.3,.025,.19,accent,0,.057,0));arm.add(arm.shoulder);
   arm.upper=new THREE.Group();arm.upper.add(box(.07,ARM_LENGTH,.08,'#263541',0,-ARM_LENGTH/2,0));if(frame==='strider')arm.upper.add(glow(.02,.16,.025,accent,side*.065,-.1,.055));
   arm.elbow=sphere(.043,accent,0,0,0);arm.lower=new THREE.Group();const fw=frame==='brawler'?.072:.055;arm.lower.add(plate([[-fw,.055],[fw,.055],[fw*.7,-.085],[-fw*.7,-.085]],.11,color,0,-.095,0),armor(.045,.052,.03,accent,0,-.075,.065));if(frame==='wild')arm.lower.add(box(.045,.1,.06,accent,side*.08,-.09,0));
   arm.hand=new THREE.Group();arm.hand.name=n===0?'rightHand':'leftHand';arm.hand.add(box(.07,.065,.07,'#1f303d'));arm.add(arm.upper,arm.elbow,arm.lower,arm.hand);bodyRig.add(arm);refs.arms.push(arm);}
  const [legColor,legAccent]=colors('legs'),legFrame=item('legs').frame;const legs=new THREE.Group();root.add(legs);refs.legGroup=legs;refs.legFrame=legFrame;
+ for(const mesh of [...bodyRig.children])if(mesh.name==='pelvisArmour'||mesh.position.y===.39)legs.add(mesh);
  for(const side of [-1,1]){const leg=new THREE.Group();leg.position.set(side*.105,.335,0);leg.userData.side=side;
   if(legFrame==='panzer'){leg.position.set(side*.19,.13,0);leg.add(armor(.16,.18,.4,'#263442'),armor(.14,.05,.32,legColor,0,.1,0));for(let j=0;j<4;j++){const wheel=cylinder(.065,.17,'#596c74',0,-.015,-.13+j*.09);wheel.rotation.z=Math.PI/2;leg.add(wheel);}leg.add(glow(.035,.01,.28,legAccent,side*.085,.035,0));}
   else {
@@ -159,14 +170,28 @@ export class ArenaRenderer{
   const motion=poseWeapons(ref,u,time),canPose=!u.dead&&!(u.down>0),reaction=u.hitReaction,reactionWeight=reaction?Math.sin(Math.PI*Math.min(1,reaction.elapsed/reaction.duration)):0,relative=reaction?(reaction.yaw-u.yaw):0;
   ref.bodyPivot.rotation.set(u.dead?Math.PI/3:u.down>0?.9:motion.body[0]+(u.dashTime>0?.13:0)+Math.cos(relative)*(reaction?.strength||0)*reactionWeight,canPose?motion.body[1]:0,u.dead?.8:u.status==='stun'?Math.sin(time*30)*.03:canPose?motion.body[2]-Math.sin(relative)*(reaction?.strength||0)*reactionWeight:0);
   const drop=canPose?motion.drop:0,shift=canPose?motion.shift:[0,0];ref.bodyPivot.position.set(shift[0],.36+drop,shift[1]);ref.legGroup.position.set(shift[0]*.5,drop,shift[1]*.6);const hipYaw=canPose&&ref.legFrame!=='panzer'?motion.hipYaw:0;ref.legGroup.rotation.y=hipYaw;
-  for(const [i,leg]of ref.feet.entries())if(leg.knee){
+  const footTargets=ref.feet.map((leg,i)=>{
    const foot=new THREE.Vector3(...motion.feet[i]);
+   if(canPose&&u.grounded&&motion.plantOrigin&&!u.guard){
+    const travel=new THREE.Vector3(u.x-motion.plantOrigin[0],0,u.z-motion.plantOrigin[2]).applyAxisAngle(new THREE.Vector3(0,1,0),-(motion.plantYaw??u.yaw));
+    const a=u.attack||u.motion,r=motionRhythm('sword',a),p=Math.min(1,a.elapsed/a.duration),t=Math.max(0,Math.min(1,(p-r.windup*.5)/(r.contactEnd-r.windup*.5))),phase=t*t*(3-2*t),distance=Math.min(r.advance,Math.max(0,travel.z)/Math.max(.001,phase));
+    foot.z+=distance*motion.footStride[i];foot.sub(travel);
+   }
    if(!canPose)foot.set(leg.userData.side*.105,.035,.045);
    else if(!u.grounded){foot.y+=.075;foot.z-=.055;}
    else if(!u.attack&&!u.motion&&speed>.2){const phase=stride*(i?1:-1);foot.z+=phase*.11;foot.y+=Math.max(0,phase)*.06;}
-   foot.sub(ref.legGroup.position).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw);poseLeg(leg,foot);leg.foot.rotation.y=(motion.footYaw[i]||0)-hipYaw;
+   return foot;
+  });
+  if(canPose&&u.grounded&&motion.sword&&ref.legFrame!=='panzer'){
+   // Preserve authored ground contacts: lower the pelvis a little when a raised
+   // chest would otherwise exceed the leg's reach and pull a planted foot up.
+   let settle=0;for(const [i,leg]of ref.feet.entries()){
+    const ankle=footTargets[i].clone().sub(ref.legGroup.position).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw).sub(leg.position),horizontal=ankle.x*ankle.x+ankle.z*ankle.z,vertical=Math.sqrt(Math.max(0,(THIGH+SHIN-.002)**2-horizontal));
+    settle=Math.max(settle,-ankle.y-vertical);
+   }settle=Math.min(.10,settle);ref.legGroup.position.y-=settle;ref.bodyPivot.position.y-=settle;
   }
-  ref.head.rotation.y=canPose?-motion.body[1]*.28:0;ref.head.rotation.x=canPose?-motion.body[0]*.20:0;ref.ring.material.opacity=u.buffTime>0?.85:.45;updateTrails(ref,u,time,motion.name);
+  for(const [i,leg]of ref.feet.entries())if(leg.knee){const foot=footTargets[i].clone().sub(ref.legGroup.position).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw);poseLeg(leg,foot);leg.foot.rotation.y=(motion.footYaw[i]||0)-hipYaw;}
+  ref.head.rotation.y=canPose?-motion.body[1]*(motion.sword?.75:.28):0;ref.head.rotation.x=canPose?-motion.body[0]*(motion.sword?.65:.20):0;ref.ring.material.opacity=u.buffTime>0?.85:.45;updateTrails(ref,u,time,motion.name);
  }
 
  event(e){if(!['hit','explosion','dash','buff','kill','spark','special','jump'].includes(e.type))return;const unit=this.robots.get(e.unit);const pos=e.x!==undefined?new THREE.Vector3(e.x,e.y||.05,e.z):unit?unit.root.position.clone():new THREE.Vector3();const color=e.type==='hit'?(e.crit?'#ffd48b':'#96ffe4'):e.type==='explosion'?'#ffae6f':'#67efdb';const radius=e.radius|| (e.type==='special'?.9:e.type==='kill'?.6:.2);const mesh=new THREE.Mesh(new THREE.RingGeometry(radius*.6,radius,24),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.85,side:THREE.DoubleSide}));mesh.position.copy(pos);if(e.type!=='hit')mesh.rotation.x=-Math.PI/2;else mesh.quaternion.copy(this.camera.quaternion);this.effects.add(mesh);this.fx.push({mesh,age:0,duration:e.type==='explosion'?.55:.3,radius});}

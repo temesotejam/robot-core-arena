@@ -46,10 +46,26 @@ await motionPage.evaluate(async kinds=>{
  function animate(now){const time=(now-start)/1000;
   while(simulated<time){for(const m of models){const u=m.battle.human,rt=m.battle.runtime(u),want=!u.charging&&!u.queuedAttack&&(!u.attack&&rt.cooldown===0||u.attack&&rt.cooldown<=.15&&rt.cooldown>0);let input={};if(m.pressing)m.pressing=false;else if(want){input={attack:true};m.pressing=true;}m.battle.tick(1/120,input);m.battle.consumeEvents();}simulated+=1/120;}
   label.textContent=models.map(({kind,battle})=>`${WEAPONS[kind].name} ${WEAPONS[kind].ranged?'射撃':`${battle.human.combo+1}段`}`).join('　 /　 ');
-  for(const {ref,battle,x}of models){r.animateRobot(ref,{...battle.human,x,z:0},battle.time);ref.ring.visible=false;}requestAnimationFrame(animate);
+  for(const {ref,battle,x}of models){r.animateRobot(ref,battle.human,battle.time);ref.root.position.set(x,0,0);ref.ring.visible=false;}requestAnimationFrame(animate);
  }requestAnimationFrame(animate);
 },kinds);await motionPage.waitForTimeout(8200);const suffix=group?`-${group+1}`:'';await motionPage.screenshot({path:`artifacts/combo-motion${suffix}.png`});const video=motionPage.video();await motionPage.close();await video.saveAs(`artifacts/combo-motion${suffix}.webm`);
 }
+// Sword review uses the real standalone viewer and actual travelled distance.
+// Record equal speed and quarter speed, then inspect all four cuts from three
+// cameras at preparation, contact and exit, with a shield fitted.
+const swordPage=await browser.newPage({viewport:{width:1100,height:800},recordVideo:{dir:'artifacts',size:{width:1100,height:800}}});swordPage.on('pageerror',e=>errors.push(e.message));
+await swordPage.goto('http://127.0.0.1:4173/sword-motion.html');await swordPage.locator('#pose').waitFor();
+await swordPage.locator('#replay').click();await swordPage.waitForTimeout(3000);
+await swordPage.locator('#speed').selectOption('.25');await swordPage.locator('#camera').selectOption('side');await swordPage.locator('#replay').click();await swordPage.waitForTimeout(9200);
+await swordPage.locator('#play').click();const frozen=await swordPage.evaluate(async()=>(await import('/src/sword-preview.js')).swordPreview.battle.time);await swordPage.waitForTimeout(120);assert.equal(await swordPage.evaluate(async()=>(await import('/src/sword-preview.js')).swordPreview.battle.time),frozen);
+for(const view of ['front','side','rear'])for(let combo=0;combo<4;combo++)for(const p of [.16,.40,.53]){
+ await swordPage.locator('#camera').selectOption(view);await swordPage.locator(`[data-stage="${combo}"]`).click();
+ await swordPage.evaluate(async p=>{const v=(await import('/src/sword-preview.js')).swordPreview,b=v.battle,u=b.human;b.attack(u);b.meleeStep(u,u.attack.duration*p);v.draw();},p);
+ await swordPage.screenshot({path:`artifacts/sword-${view}-${combo}-${Math.round(p*100)}.png`});
+}
+await swordPage.locator('#shield').selectOption('0');assert(await swordPage.evaluate(async()=>!(await import('/src/sword-preview.js')).swordPreview.model.hasShield));
+await swordPage.setViewportSize({width:390,height:844});assert(await swordPage.locator('.controls').evaluate(el=>el.getBoundingClientRect().right<=innerWidth));await swordPage.screenshot({path:'artifacts/sword-mobile.png'});
+const swordVideo=swordPage.video();await swordPage.close();await swordVideo.saveAs('artifacts/sword-review.webm');
 // Verify visible poise and a real slow/fast exchange, using the game's normal fixed-step loop.
 const duelPage=await browser.newPage({viewport:{width:1100,height:680},recordVideo:{dir:'artifacts',size:{width:1100,height:680}}});duelPage.on('pageerror',e=>errors.push(e.message));
 await duelPage.goto('http://127.0.0.1:4173');await duelPage.locator('.home-copy').waitFor();
