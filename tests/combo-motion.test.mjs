@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {Battle} from '../src/sim.js';
 import {CATALOG,WEAPONS} from '../src/data.js';
 import {defaultConfig} from '../src/customize.js';
-import {COMBO_CLIPS,sampleMotion} from '../src/motion.js';
+import {COMBO_CLIPS,sampleMotion,motionRhythm} from '../src/motion.js';
 import {createRobot,ArenaRenderer} from '../src/render.js';
 import * as THREE from '../vendor/three.module.min.js';
 function battle(kind='sword'){
@@ -51,4 +51,39 @@ test('振りかぶりと戻しでは命中せず、振る区間で一度だけ�
 });
 test('先行入力の受付端でも次のフレームに繰り越して確実に実行する',()=>{
  const b=battle(),u=b.human;tap(b);u.attack.elapsed=u.attack.duration-.20;b.runtime(u).cooldown=.22;u.actionTime=0;u.lastAttackHeld=true;u.charging=true;u.charge=0;b.consumeEvents();b.handleInput(u,{},1/60);assert(u.queuedAttack);advance(b,.24);assert.equal(u.combo,1);assert.equal(b.consumeEvents().filter(e=>e.type==='attack').length,1);
+});
+
+test('先行入力時は次段の構えへつなぎ、開始時に直前の全身姿勢を引き継ぐ',()=>{
+ for(const kind of Object.keys(COMBO_CLIPS)){
+  const b=battle(kind),u=b.human;b.attack(u);const before={...u.motion,elapsed:u.motion.duration};u.motion=before;u.attack=null;b.runtime(u).cooldown=0;u.actionTime=0;u.queuedAttack={charge:0,remaining:.1};
+  const expected=sampleMotion(kind,before,{nextCombo:1});assert.notDeepEqual(expected.right,sampleMotion(kind,null).right);assert(b.attack(u));
+  const actual=sampleMotion(kind,u.attack);for(const key of ['right','left','body','drop','shift','feet'])assert.deepEqual(actual[key],expected[key],`${kind}: ${key}の接続`);
+  const settled=sampleMotion(kind,{...u.attack,elapsed:u.attack.duration});assert.deepEqual(settled.right,sampleMotion(kind,null).right);
+ }
+});
+test('近接の踏み込みは少量で、壁と相手の手前で止まる',()=>{
+ const run=b=>{const u=b.human;b.attack(u);for(let i=0;i<150&&u.attack;i++)b.meleeStep(u,1/120);};
+ for(const kind of ['sword','knuckle','hammer','lance']){
+  const free=battle(kind),u=free.human;u.x=0;u.z=0;u.yaw=0;run(free);assert(Math.abs(u.z-motionRhythm(kind).advance)<1e-6);assert.equal(u.x,0);
+  const wall=battle(kind);Object.assign(wall.human,{x:0,z:-7.04,yaw:0});run(wall);assert(wall.human.z<=-7.03);
+  const near=battle(kind),a=near.human,v=near.entities[1];Object.assign(a,{x:0,z:0,yaw:0});Object.assign(v,{x:0,z:.65});a.target=v.id;run(near);assert(a.z<=v.z-.61+1e-8);
+ }
+});
+test('全身の脚関節がつながり、待機・歩行・コンボで足が地面を突き抜けない',()=>{
+ for(const kind of Object.keys(COMBO_CLIPS)){
+  const b=battle(kind),u=b.human,ref=createRobot(u.config,id=>CATALOG[id]);ref.active=0;
+  for(const combo of [-1,...COMBO_CLIPS[kind].map((_,i)=>i)])for(let i=0;i<=24;i++){
+   u.attack=combo<0?null:{weapon:kind,combo,elapsed:i/24,duration:1};u.vx=combo<0?4:0;ArenaRenderer.prototype.animateRobot.call({},ref,u,i/24);ref.root.updateMatrixWorld(true);
+   for(const leg of ref.feet){
+    const knee=leg.upper.localToWorld(new THREE.Vector3(0,-.155,0)),ankle=leg.lower.localToWorld(new THREE.Vector3(0,-.17,0));
+    assert(knee.distanceTo(leg.knee.getWorldPosition(new THREE.Vector3()))<1e-8);assert(ankle.distanceTo(leg.foot.getWorldPosition(new THREE.Vector3()))<1e-8);
+    assert(leg.foot.getWorldPosition(new THREE.Vector3()).y>=u.y+.032-1e-8,`${kind} ${combo} ${i}: 足が地面を突き抜ける`);
+   }
+  }
+ }
+});
+test('命中した方向へ被弾姿勢を付け、時間経過で消え、ポーズでは止まる',()=>{
+ const b=battle('rapier'),u=b.human,v=b.entities[1];Object.assign(u,{x:0,z:0,yaw:0});Object.assign(v,{x:0,z:.8});u.target=v.id;b.attack(u);advance(b,.1);assert(v.hitReaction);assert.equal(v.hitReaction.yaw,0);
+ const ref=createRobot(v.config,id=>CATALOG[id]);ref.active=0;ArenaRenderer.prototype.animateRobot.call({},ref,v,b.time);assert(Math.hypot(ref.bodyPivot.rotation.x,ref.bodyPivot.rotation.z)>.01);
+ const snapshot=JSON.stringify(v.hitReaction);b.paused=true;advance(b,.1);assert.equal(JSON.stringify(v.hitReaction),snapshot);b.paused=false;advance(b,.25);assert.equal(v.hitReaction,null);
 });
