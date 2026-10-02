@@ -7,6 +7,29 @@ try{for(let i=0;i<100;i++){try{if((await fetch('http://127.0.0.1:4173')).ok)brea
 browser=await chromium.launch({headless:true,args:['--no-sandbox','--enable-unsafe-swiftshader']});
 const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
 await page.goto('http://127.0.0.1:4173');await page.locator('.home-copy').waitFor();fs.mkdirSync('artifacts',{recursive:true});await page.screenshot({path:'artifacts/home.png'});
+// Inspect the real WebGL models from the front, side and mid-attack, including every weapon.
+const gallery=await browser.newPage({viewport:{width:1440,height:1080}});gallery.on('pageerror',e=>errors.push(e.message));
+await gallery.goto('http://127.0.0.1:4173');await gallery.locator('.home-copy').waitFor();
+await gallery.addStyleTag({content:'body>div{display:none!important}.weapon-label{display:block!important;position:fixed;transform:translateX(-50%);color:#dcf9f1;font:16px sans-serif;pointer-events:none}'});
+for(const pose of ['front','side','attack']){
+ await gallery.evaluate(async pose=>{
+  const [{app},THREE,{createRobot},{defaultConfig},{CATALOG,WEAPONS}]=await Promise.all([import('/src/main.js'),import('/vendor/three.module.min.js'),import('/src/render.js'),import('/src/customize.js'),import('/src/data.js')]);
+  const r=app.renderer;app.view='inspection';r.mode='inspection';r.clear();r.scene.fog=null;r.renderer.shadowMap.enabled=false;
+  r.camera=new THREE.OrthographicCamera(-16/3,16/3,4,-4,.04,100);r.camera.position.set(0,.5,20);r.camera.lookAt(0,.5,0);r.camera.updateMatrixWorld();
+  document.querySelectorAll('.weapon-label').forEach(el=>el.remove());
+  Object.entries(WEAPONS).forEach(([kind,w],i)=>{
+   const config=defaultConfig();config.sets[0]={item:`weapon:${kind}`,shield:w.shield?'shield:basic':null};const ref=createRobot(config,id=>CATALOG[id]);ref.active=0;
+   const x=(i%5-2)*2.1,y=(1.5-Math.floor(i/5))*1.6,yaw=pose==='side'?-Math.PI/2:-.45;
+   if(pose==='attack')r.animateRobot(ref,{config,active:0,stats:{weapon:w,frame:'knight'},x,y,z:0,yaw,vx:0,vz:0,dashTime:0,grounded:true,attack:w.ranged?null:{elapsed:.5,duration:1,thrust:['rapier','lance'].includes(kind)},actionTime:w.ranged?.1:0},.12);
+   else {ref.root.position.set(x,y,0);ref.root.rotation.y=yaw;}
+   ref.ring.visible=false;ref.root.updateMatrixWorld(true);r.world.add(ref.root);
+   for(const weapon of ref.weaponAttachments.filter(o=>o.name!=='shield'))if(weapon.getWorldPosition(new THREE.Vector3()).distanceTo(weapon.parent.getWorldPosition(new THREE.Vector3()))>1e-6)throw Error(`${kind}: weapon detached`);
+   const label=document.createElement('div'),point=new THREE.Vector3(x,y-.22,0).project(r.camera);label.className='weapon-label';label.textContent=w.name;label.style.left=`${(point.x*.5+.5)*innerWidth}px`;label.style.top=`${(-point.y*.5+.5)*innerHeight}px`;document.body.append(label);
+  });r.renderer.render(r.scene,r.camera);
+ },pose);
+ await gallery.waitForTimeout(150);await gallery.screenshot({path:`artifacts/weapons-${pose}.png`});
+}
+await gallery.close();
 await page.locator('.nav [data-view="settings"]').click();
 const binding=(device,id,slot=0)=>page.locator(`[data-action="bindInput"][data-device="${device}"][data-id="${id}"][data-slot="${slot}"]`);
 await binding('keyboard','jump').click();await page.keyboard.press('KeyJ');await page.locator('#modal').waitFor({state:'hidden'});assert.equal(await binding('keyboard','jump').innerText(),'J');

@@ -1,38 +1,77 @@
 import * as THREE from '../vendor/three.module.min.js';
-import {FRAMES,WEAPONS,PARTS,ELEMENTS} from './data.js';
+import {FRAMES,WEAPONS} from './data.js';
 const mats=new Map(),boxes=new Map();
 function material(color,emissive=false){const key=`${color}:${emissive}`;if(!mats.has(key))mats.set(key,new THREE.MeshStandardMaterial({color,metalness:emissive?.15:.55,roughness:emissive?.25:.42,emissive:emissive?color:'#000000',emissiveIntensity:emissive?1.6:0}));return mats.get(key);}
 function box(w,h,d,color,x=0,y=0,z=0){const key=`${w},${h},${d}`;if(!boxes.has(key))boxes.set(key,new THREE.BoxGeometry(w,h,d));const mesh=new THREE.Mesh(boxes.get(key),material(color));mesh.position.set(x,y,z);mesh.castShadow=true;mesh.receiveShadow=true;return mesh;}
 function glow(w,h,d,color,x=0,y=0,z=0){const mesh=box(w,h,d,color,x,y,z);mesh.material=material(color,true);return mesh;}
 function cylinder(radius,height,color,x=0,y=0,z=0,sides=12){const mesh=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,height,sides),material(color));mesh.position.set(x,y,z);mesh.castShadow=true;return mesh;}
 function sphere(radius,color,x,y,z){const mesh=new THREE.Mesh(new THREE.SphereGeometry(radius,10,6),material(color));mesh.position.set(x,y,z);return mesh;}
-function weaponModel(kind,team){const group=new THREE.Group(),w=WEAPONS[kind],metal='#b7c9d4',dark='#263746',accent=team?'#ffac72':'#77f6d6';
- if(!w.ranged){group.add(box(.035,.16,.04,dark,0,.06,0));if(kind==='knuckle'){group.add(box(.15,.12,.15,dark,0,0,.08),glow(.12,.015,.12,accent,0,.06,.08));}
+function weaponModel(kind,team){const group=new THREE.Group(),w=WEAPONS[kind],metal='#b7c9d4',dark='#263746',accent=team?'#ffac72':'#77f6d6';group.name=`weapon:${kind}`;
+ // Model origin is the centre of the grip, shared with the hand socket.
+ if(!w.ranged){if(kind!=='knuckle')group.add(box(.035,.16,.04,dark));if(kind==='knuckle'){group.add(box(.15,.12,.15,dark,0,0,.055),glow(.12,.015,.12,accent,0,.06,.055));}
   else if(kind==='hammer'){group.add(box(.035,.5,.04,dark,0,.23,0),box(.32,.15,.18,metal,0,.49,0),glow(.28,.02,.19,accent,0,.51,0));}
   else if(['lance','naginata','scythe'].includes(kind)){group.add(box(.028,.8,.028,dark,0,.3,0));if(kind==='lance'){const tip=new THREE.Mesh(new THREE.ConeGeometry(.055,.2,4),material(metal));tip.position.y=.8;group.add(tip);}else {const blade=box(kind==='scythe'?.35:.18,.05,.045,metal,kind==='scythe'?.13:.06,.68,0);blade.rotation.z=.22;group.add(blade,glow(.04,.19,.035,accent,0,.67,.025));}}
-  else {const length=kind==='dagger'?.26:kind==='rapier'?.62:.47,width=kind==='rapier'?.026:.07;group.add(box(width,length,.024,metal,0,.18+length/2,0),glow(.013,length*.85,.029,accent,-width/2+.014,.18+length/2,0),box(.14,.025,.07,dark,0,.17,0));}}
+  else {const length=kind==='dagger'?.26:kind==='rapier'?.62:.47,width=kind==='rapier'?.026:.07;group.add(box(width,length,.024,metal,0,.10+length/2,0),glow(.013,length*.85,.029,accent,-width/2+.014,.10+length/2,0),box(.14,.025,.07,dark,0,.09,0));}}
  else {const size=kind==='sniper'?.68:['bazooka','missile'].includes(kind)?.55:kind==='pistol'?.22:.39;group.add(box(.09,.12,size,dark,0,.03,size/2-.06),box(.025,.15,.055,dark,0,-.08,0),glow(.018,.02,size*.65,accent,.05,.07,size*.33));
-  if(kind==='sniper'){group.add(cylinder(.025,.18,metal,0,.02,size));const scope=cylinder(.028,.15,dark,0,.12,.15);scope.rotation.x=Math.PI/2;group.add(scope,glow(.04,.025,.025,accent,0,.13,.24));}
+  if(kind==='sniper'){const barrel=cylinder(.025,.18,metal,0,.02,size);barrel.rotation.x=Math.PI/2;group.add(barrel);const scope=cylinder(.028,.15,dark,0,.12,.15);scope.rotation.x=Math.PI/2;group.add(scope,glow(.04,.025,.025,accent,0,.13,.24));}
   if(kind==='shotgun'||kind==='heavyShotgun')group.add(box(.085,.055,.17,metal,0,0,size));
   if(kind==='bazooka'){const tube=cylinder(.09,.58,dark,0,.03,.21);tube.rotation.x=Math.PI/2;group.add(tube,glow(.13,.02,.04,accent,0,.12,.38));}
   if(kind==='missile'){group.add(box(.22,.15,.28,metal,0,.08,.22));for(const x of [-.055,.055])for(const y of [.05,.12]){const tube=cylinder(.025,.12,dark,x,y,.4);tube.rotation.x=Math.PI/2;group.add(tube);}}
   if(kind==='machinegun'||kind==='assault')group.add(box(.07,.12,.1,metal,0,-.08,.08));
+  for(const part of group.children)part.position.y+=.08;
  }
+ if(w.ranged&&!w.shield&&!['dualGun'].includes(kind))group.userData.supportGrip=[.045,.065,.085];
+ if(['hammer','naginata','scythe'].includes(kind))group.userData.supportGrip=[0,.09,0];
  return group;
 }
-function createRobot(config,getItem,team=0){const root=new THREE.Group(),bodyPivot=new THREE.Group();root.add(bodyPivot);const refs={root,bodyPivot,arms:[],feet:[],weapons:new THREE.Group(),phase:0};
+const ARM_LENGTH=.195,DOWN=new THREE.Vector3(0,-1,0);
+function poseArm(arm,target,rotation){
+ const wrist=target.clone().sub(arm.position),distance=Math.min(wrist.length(),ARM_LENGTH*2-.001);wrist.setLength(distance);
+ const direction=wrist.clone().normalize(),pole=new THREE.Vector3(arm.userData.side,0,-.35);pole.addScaledVector(direction,-pole.dot(direction)).normalize();
+ const elbow=wrist.clone().multiplyScalar(.5).addScaledVector(pole,Math.sqrt(ARM_LENGTH**2-(distance/2)**2));
+ arm.upper.quaternion.setFromUnitVectors(DOWN,elbow.clone().normalize());arm.elbow.position.copy(elbow);
+ arm.lower.position.copy(elbow);arm.lower.quaternion.setFromUnitVectors(DOWN,wrist.clone().sub(elbow).normalize());
+ arm.hand.position.copy(wrist);arm.hand.rotation.copy(rotation);
+}
+// Both the hangar and battle use these poses; attachments never need to cancel a shoulder rotation.
+function poseWeapons(ref,u=null,time=0){
+ const w=WEAPONS[ref.kind],speed=u?Math.hypot(u.vx,u.vz):0,stride=Math.sin(time*12),progress=u?.attack?THREE.MathUtils.clamp(u.attack.elapsed/u.attack.duration,0,1):0,wave=Math.sin(progress*Math.PI),dual=['dualSword','dualGun','knuckle'].includes(w.id),twoHandMelee=['hammer','naginata','scythe'].includes(w.id);
+ const rangedRecoil=w.ranged&&u?.actionTime>0?Math.sin(time*35)*.012:0;
+ for(const [i,arm]of ref.arms.entries()){
+  const side=arm.userData.side,armed=i===0||dual;let target=new THREE.Vector3(side*.26,.32,.08),rotation=new THREE.Euler();
+  if(armed&&w.ranged){target.set(dual?side*.24:w.shield?-.24:-.065,(w.shield||dual)?.52:.49,.18-rangedRecoil);rotation.x=rangedRecoil;}
+  else if(armed){const thrust=['rapier','lance'].includes(w.id)||u?.attack?.thrust,knuckle=w.id==='knuckle',swing=wave*(i&&w.id==='dualSword'?.8:1);target.set(side*.27,(thrust||knuckle)?.43:.32,(thrust||knuckle)?.18:.08);
+   if(knuckle){target.y+=swing*.04;target.z+=swing*.13;}
+   else if(thrust){target.z+=swing*.14;rotation.x=Math.PI/2;rotation.z=-side*.06;}
+   else if(twoHandMelee){target.set(.02,.43+swing*.12,.16+swing*.02);rotation.set(.75+swing*1.5,0,.15);}
+   else {const offset=target.clone().sub(arm.position);offset.applyAxisAngle(new THREE.Vector3(1,0,0),-swing*.85+(speed>.2?stride*.08*(i?-1:1):0));target.copy(arm.position).add(offset);rotation.set(.55+swing*1.8,0,-side*.35);}
+  }
+  if(i===1&&ref.hasShield)target.set(.28,.43,.14);
+  if(u?.guard){if(i===1)target.set(.18,.54,.25);else if(!w.ranged&&!twoHandMelee){target.set(-.23,.51,.21);rotation.x=w.id==='knuckle'?0:.75;}}
+  poseArm(arm,target,rotation);
+ }
+ const supportGrip=ref.weaponAttachments[0].userData.supportGrip;
+ if(supportGrip){const right=ref.arms[0].hand,support=new THREE.Vector3(...supportGrip).applyEuler(right.rotation).add(right.position).add(ref.arms[0].position);poseArm(ref.arms[1],support,new THREE.Euler());}
+}
+export function createRobot(config,getItem,team=0){const root=new THREE.Group(),bodyPivot=new THREE.Group();root.add(bodyPivot);const refs={root,bodyPivot,arms:[],feet:[],phase:0};
  const item=p=>getItem(config.armor[p]),f=p=>FRAMES[item(p).frame],colors=p=>[f(p).color,f(p).accent],teamColor=team?'#ff9b75':'#62efd4';
  const [bodyColor,bodyAccent]=colors('body'),frame=item('body').frame;const body=box(frame==='panzer'?.43:frame==='strider'?.27:.34,frame==='brawler'?.34:.31,.24,bodyColor,0,.56,0);bodyPivot.add(body,box(.18,.05,.2,'#273644',0,.36,0),glow(.075,.075,.025,teamColor,0,.59,.135));
  bodyPivot.add(box(.12,.08,.035,'#273644',-.1,.62,.13),box(.12,.08,.035,'#273644',.1,.62,.13));if(frame==='strider')for(const side of [-1,1]){const fin=box(.04,.27,.11,bodyAccent,side*.18,.59,-.13);fin.rotation.z=side*.25;bodyPivot.add(fin);}if(frame==='brawler')bodyPivot.add(box(.36,.045,.26,bodyAccent,0,.71,0));if(frame==='wild')bodyPivot.add(box(.27,.1,.12,bodyAccent,0,.55,-.17));if(frame==='panzer')bodyPivot.add(box(.36,.08,.19,'#364451',0,.72,-.04));
  const headFrame=item('head').frame,[headColor,headAccent]=colors('head'),head=new THREE.Group();head.position.y=.82;head.add(box(headFrame==='panzer'?.22:.18,.16,.18,headColor),box(.15,.048,.028,'#182731',0,.005,.1),glow(.115,.024,.032,teamColor,0,.005,.116));if(headFrame==='knight')head.add(box(.025,.11,.16,headAccent,0,.12,-.015));if(headFrame==='strider')for(const side of [-1,1])head.add(box(.02,.12,.04,headAccent,side*.09,.04,-.04));if(headFrame==='wild')for(const side of [-1,1]){const ear=box(.06,.12,.04,headAccent,side*.075,.09,-.05);ear.rotation.z=side*.25;head.add(ear);}if(headFrame==='brawler')head.add(box(.23,.04,.2,headAccent,0,.08,0));bodyPivot.add(head);refs.head=head;
- for(const [n,p]of ['rightArm','leftArm'].entries()){const side=n===0?-1:1,[color,accent]=colors(p),frame=item(p).frame,arm=new THREE.Group();arm.position.set(side*.24,.66,0);arm.add(box(frame==='brawler'?.18:.115,frame==='panzer'?.18:.13,.16,color,0,.015,0),box(.07,.17,.08,'#263541',0,-.12,0),sphere(.043,accent,0,-.2,0),box(frame==='brawler'?.14:.09,.14,.105,color,0,-.26,0),box(.07,.065,.07,'#1f303d',0,-.36,.01));if(frame==='strider')arm.add(glow(.02,.19,.025,accent,side*.065,-.1,.08));if(frame==='wild')arm.add(box(.045,.1,.06,accent,side*.08,-.2,0));bodyPivot.add(arm);refs.arms.push(arm);}
+ for(const [n,p]of ['rightArm','leftArm'].entries()){const side=n===0?-1:1,[color,accent]=colors(p),frame=item(p).frame,arm=new THREE.Group();arm.position.set(side*.24,.66,0);arm.userData.side=side;
+  arm.add(box(frame==='brawler'?.18:.115,frame==='panzer'?.18:.13,.16,color,0,.015,0));
+  arm.upper=new THREE.Group();arm.upper.add(box(.07,ARM_LENGTH,.08,'#263541',0,-ARM_LENGTH/2,0));if(frame==='strider')arm.upper.add(glow(.02,.16,.025,accent,side*.065,-.1,.055));
+  arm.elbow=sphere(.043,accent,0,0,0);arm.lower=new THREE.Group();arm.lower.add(box(frame==='brawler'?.14:.09,.15,.105,color,0,-.10,0));if(frame==='wild')arm.lower.add(box(.045,.1,.06,accent,side*.08,-.09,0));
+  arm.hand=new THREE.Group();arm.hand.name=n===0?'rightHand':'leftHand';arm.hand.add(box(.07,.065,.07,'#1f303d'));arm.add(arm.upper,arm.elbow,arm.lower,arm.hand);bodyPivot.add(arm);refs.arms.push(arm);}
  const [legColor,legAccent]=colors('legs'),legFrame=item('legs').frame;const legs=new THREE.Group();root.add(legs);refs.legGroup=legs;
  for(const side of [-1,1]){const leg=new THREE.Group();leg.position.set(side*.105,.33,0);if(legFrame==='panzer'){leg.position.set(side*.19,.13,0);leg.add(box(.16,.18,.4,'#263442',0,0,0),box(.14,.05,.32,legColor,0,.1,0));for(let j=0;j<4;j++){const wheel=cylinder(.065,.17,'#596c74',0,-.015,-.13+j*.09);wheel.rotation.z=Math.PI/2;leg.add(wheel);}leg.add(glow(.035,.01,.28,legAccent,side*.085,.035,0));}
   else {leg.add(box(legFrame==='brawler'?.12:.085,.16,.1,legColor,0,-.06,0),sphere(.043,'#263442',0,-.15,0),box(legFrame==='wild'?.12:.095,.16,.12,legColor,0,-.22,legFrame==='wild'?-.02:0),box(legFrame==='wild'?.14:.12,.065,.2,'#263442',0,-.315,.05),glow(.05,.055,.015,legAccent,0,-.22,.072));if(legFrame==='strider')leg.add(box(.025,.24,.045,legAccent,side*.075,-.18,-.04));}
   legs.add(leg);refs.feet.push(leg);
  }
  if(legFrame==='wild'){const tail=box(.045,.045,.3,legAccent,0,.2,-.24);tail.rotation.x=-.25;legs.add(tail);}const ring=new THREE.Mesh(new THREE.RingGeometry(.35,.38,32),new THREE.MeshBasicMaterial({color:teamColor,transparent:true,opacity:.65,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.015;root.add(ring);refs.ring=ring;
- refs.addWeapons=(set)=>{const kind=getItem(set.item).kind,wm=weaponModel(kind,team);const attach=new THREE.Group();attach.position.set(0,-.35,.02);if(WEAPONS[kind].ranged)attach.rotation.x=1.0;attach.add(wm);refs.arms[0].add(attach);refs.weaponAttachments=[attach];if(['dualSword','dualGun','knuckle'].includes(kind)){const left=new THREE.Group();left.position.set(0,-.35,.02);if(WEAPONS[kind].ranged)left.rotation.x=1;left.add(weaponModel(kind,team));refs.arms[1].add(left);refs.weaponAttachments.push(left);}else if(set.shield&&WEAPONS[kind].shield){const shield=new THREE.Group();shield.add(box(.19,.3,.035,bodyColor,0,0,.025),glow(.025,.22,.04,teamColor,0,0,.05));shield.position.set(0,-.23,.1);refs.arms[1].add(shield);refs.weaponAttachments.push(shield);}refs.kind=kind;};
+ refs.addWeapons=(set)=>{const kind=getItem(set.item).kind,wm=weaponModel(kind,team);refs.arms[0].hand.add(wm);refs.weaponAttachments=[wm];refs.hasShield=false;
+  if(['dualSword','dualGun','knuckle'].includes(kind)){const left=weaponModel(kind,team);refs.arms[1].hand.add(left);refs.weaponAttachments.push(left);}
+  else if(set.shield&&WEAPONS[kind].shield){const shield=new THREE.Group();shield.name='shield';shield.add(box(.19,.3,.035,bodyColor,0,.055,.06),glow(.025,.22,.04,teamColor,0,.055,.085));refs.arms[1].hand.add(shield);refs.weaponAttachments.push(shield);refs.hasShield=true;}refs.kind=kind;poseWeapons(refs);};
  refs.changeWeapons=set=>{for(const a of refs.weaponAttachments||[])a.parent?.remove(a);refs.addWeapons(set);};refs.changeWeapons(config.sets[0]);return refs;
 }
 export class ArenaRenderer{
@@ -51,10 +90,9 @@ export class ArenaRenderer{
  project(x,y,z){const v=new THREE.Vector3(x,y,z).project(this.camera);return {x:(v.x*.5+.5)*window.innerWidth,y:(-.5*v.y+.5)*window.innerHeight,visible:v.z<1&&v.z>-1&&Math.abs(v.x)<1.1&&Math.abs(v.y)<1.1};}
  orderedTargets(b){return b.enemiesOf(b.human).sort((a,c)=>{const p=this.project(a.x,a.y+.5,a.z),q=this.project(c.x,c.y+.5,c.z);return Math.abs(p.x-window.innerWidth/2)-Math.abs(q.x-window.innerWidth/2)||Math.hypot(a.x-b.human.x,a.z-b.human.z)-Math.hypot(c.x-b.human.x,c.z-b.human.z);});}
  screenTargets(b){return b.enemiesOf(b.human).sort((a,c)=>this.project(a.x,a.y+.5,a.z).x-this.project(c.x,c.y+.5,c.z).x);}
- animateRobot(ref,u,time){const w=u.stats.weapon,speed=Math.hypot(u.vx,u.vz),stride=Math.sin(time*(u.dashTime>0?28:12));ref.root.position.set(u.x,u.y,u.z);ref.root.rotation.y=u.yaw;ref.root.visible=true;ref.ring.visible=!u.dead;ref.bodyPivot.rotation.z=u.dead?.8:u.status==='stun'?Math.sin(time*30)*.03:u.dashTime>0?-.08:0;ref.bodyPivot.rotation.x=u.dead?Math.PI/3:u.down>0?.9:0;ref.root.scale.setScalar(u.dead?.65:1);if(ref.active!==u.active){ref.active=u.active;ref.changeWeapons(u.config.sets[u.active]);}
+ animateRobot(ref,u,time){const speed=Math.hypot(u.vx,u.vz),stride=Math.sin(time*(u.dashTime>0?28:12));ref.root.position.set(u.x,u.y,u.z);ref.root.rotation.y=u.yaw;ref.root.visible=true;ref.ring.visible=!u.dead;ref.bodyPivot.rotation.z=u.dead?.8:u.status==='stun'?Math.sin(time*30)*.03:u.dashTime>0?-.08:0;ref.bodyPivot.rotation.x=u.dead?Math.PI/3:u.down>0?.9:0;ref.root.scale.setScalar(u.dead?.65:1);if(ref.active!==u.active){ref.active=u.active;ref.changeWeapons(u.config.sets[u.active]);}
   for(const [i,leg]of ref.feet.entries())leg.rotation.x=u.stats.frame==='panzer'?0:speed>.2&&u.grounded?stride*.35*(i?1:-1):u.grounded?0:-.2;
-  const aim=w.ranged?-1.0:-.05;for(const [i,arm]of ref.arms.entries()){let swing=0;if(u.attack){const p=Math.max(0,u.attack.elapsed/u.attack.duration);swing=Math.sin(p*Math.PI)*(i&&w.id!=='dualSword'?-.3:-1.6);if(u.attack.thrust)swing=-.8;}else if(u.actionTime>0&&w.ranged)swing=-.08;else if(speed>.2&&!w.ranged)swing=stride*.15*(i?-1:1);arm.rotation.x=aim+swing;arm.rotation.z=u.guard?(i?-.5:.5):u.attack&&!u.attack.thrust?Math.sin(Math.max(0,u.attack.elapsed/u.attack.duration)*Math.PI*2)*(i?.3:-.7):0;}
-  if(u.guard)ref.arms[1].rotation.x=-.8;ref.head.rotation.y=Math.sin(time*.7)*.04;ref.ring.material.opacity=u.buffTime>0?.85:.45;
+  poseWeapons(ref,u,time);ref.head.rotation.y=Math.sin(time*.7)*.04;ref.ring.material.opacity=u.buffTime>0?.85:.45;
  }
  event(e){if(!['hit','explosion','dash','buff','kill','spark','special','jump'].includes(e.type))return;const unit=this.robots.get(e.unit);const pos=e.x!==undefined?new THREE.Vector3(e.x,e.y||.05,e.z):unit?unit.root.position.clone():new THREE.Vector3();const color=e.type==='hit'?(e.crit?'#ffd48b':'#96ffe4'):e.type==='explosion'?'#ffae6f':'#67efdb';const radius=e.radius|| (e.type==='special'?.9:e.type==='kill'?.6:.2);const mesh=new THREE.Mesh(new THREE.RingGeometry(radius*.6,radius,24),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.85,side:THREE.DoubleSide}));mesh.position.copy(pos);if(e.type!=='hit')mesh.rotation.x=-Math.PI/2;else mesh.quaternion.copy(this.camera.quaternion);this.effects.add(mesh);this.fx.push({mesh,age:0,duration:e.type==='explosion'?.55:.3,radius});}
  render(b,dt,time){if(this.mode==='hangar'){this.hangarAngle+=dt*.13;if(this.preview){this.preview.root.rotation.y=this.hangarAngle;this.preview.bodyPivot.position.y=Math.sin(time*1.4)*.005;}this.camera.position.lerp(new THREE.Vector3(-.48,1.18,3.1),.05);this.camera.lookAt(-.48,.52,0);}
