@@ -26,6 +26,7 @@ try{
  // A real keyboard hold/release on the viewer's accessible manual button.
  await page.locator('#speed').selectOption('1');await page.locator('#charge-hold').focus();await page.keyboard.down('Space');
  await page.waitForFunction(async()=>{const v=(await import('/src/sword-preview.js')).swordPreview;return v.battle.human.charge===v.battle.maxCharge(v.battle.human);});
+ await page.waitForFunction(()=>document.querySelector('#pose').textContent.includes('最大チャージ'));
  assert((await page.locator('#pose').innerText()).includes('最大チャージ'));
  await page.keyboard.up('Space');await page.waitForFunction(async()=>{const u=(await import('/src/sword-preview.js')).swordPreview.battle.human;return u.attack?.charge===1;});
  await page.waitForFunction(async()=>!(await import('/src/sword-preview.js')).swordPreview.battle.human.motion);
