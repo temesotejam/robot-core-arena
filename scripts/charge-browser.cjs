@@ -33,7 +33,10 @@ try{
  await page.waitForFunction(async()=>(await import('/src/sword-preview.js')).swordPreview.battle.human.charge>=.3);await page.mouse.up();
  await page.waitForFunction(async()=>{const u=(await import('/src/sword-preview.js')).swordPreview.battle.human;return u.attack?.charge>0&&u.attack.charge<1;});
  // Canceling a pointer via focus loss clears the hold without firing.
- await page.mouse.down();await page.waitForFunction(async()=>(await import('/src/sword-preview.js')).swordPreview.battle.human.charging);await page.locator('#play').focus();await page.mouse.up();
+ await page.mouse.down();await page.waitForFunction(async()=>(await import('/src/sword-preview.js')).swordPreview.battle.human.charging);
+ // Focus loss and release can arrive within a single simulation frame. A
+ // subsequent pointerup must not overwrite the pending cancellation.
+ await page.evaluate(()=>{document.querySelector('#play').focus();document.querySelector('#charge-hold').dispatchEvent(new PointerEvent('pointerup'));});await page.mouse.up();
  await page.waitForFunction(async()=>{const u=(await import('/src/sword-preview.js')).swordPreview.battle.human;return !u.charging&&!u.attack;});
  await page.waitForTimeout(200);assert(await page.evaluate(async()=>!(await import('/src/sword-preview.js')).swordPreview.battle.human.attack));
  await page.locator('#play').click();await page.locator('#charge-level').selectOption('.5');await page.locator('#camera').selectOption('threequarter');await page.locator('#replay').click();

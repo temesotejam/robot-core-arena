@@ -55,7 +55,7 @@ document.querySelector('#shield').onchange=e=>{withShield=e.target.value==='1';r
 document.querySelector('#target').onchange=e=>{withTarget=e.target.value==='1';reset();draw();};
 document.querySelector('#charge-level').onchange=e=>{chargeLevel=Number(e.target.value);manualMode=false;reset();draw();};
 function beginHold(){if(manualHeld)return;manualMode=true;reset();manualHeld=true;playing=true;document.querySelector('#play').textContent='一時停止';holdButton.textContent='離して攻撃';draw();}
-function endHold(cancel=false){manualHeld=false;manualCancel=cancel;holdButton.textContent='長押しで試す';}
+function endHold(cancel=false){manualHeld=false;manualCancel||=cancel;holdButton.textContent='長押しで試す';}
 holdButton.addEventListener('pointerdown',e=>{e.preventDefault();holdButton.setPointerCapture(e.pointerId);beginHold();});
 holdButton.addEventListener('pointerup',()=>endHold());holdButton.addEventListener('pointercancel',()=>endHold(true));
 holdButton.addEventListener('keydown',e=>{if([' ','Enter'].includes(e.key)){e.preventDefault();if(!e.repeat)beginHold();}});holdButton.addEventListener('keyup',e=>{if([' ','Enter'].includes(e.key)){e.preventDefault();endHold();}});
