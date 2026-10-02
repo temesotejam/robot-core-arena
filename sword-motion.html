@@ -4,7 +4,7 @@
  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
  <title>ソード動作確認 — Robot Core Arena</title>
  <style>
-  *{box-sizing:border-box}body{margin:0;background:#0a111b;color:#e4f6f2;font-family:system-ui,sans-serif}canvas{position:fixed;width:100%;height:100%;touch-action:none}
+  *{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:#0a111b;color:#e4f6f2;font-family:system-ui,sans-serif}canvas{position:fixed;width:100%;height:100%;touch-action:none}
   header{position:fixed;top:20px;left:24px;right:24px;pointer-events:none}h1{font-size:22px;margin:0 0 8px}header p{margin:0;color:#a0b7bf;font-size:13px}a{pointer-events:auto;color:#74e6ce;text-decoration:none;position:fixed;right:24px;top:24px;font-size:14px}
   .controls{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);width:min(700px,calc(100% - 28px));padding:16px;background:#12202eea;border:1px solid #2b4452;border-radius:12px;backdrop-filter:blur(12px)}
   #pose{font-size:15px;min-height:22px;margin-bottom:12px;color:#b7f7e4}.row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.row+.row{margin-top:10px}button,select{font:inherit;font-size:13px;color:#d6ebe7;border:1px solid #344d5d;border-radius:6px;padding:8px 11px;background:#1b2c3b;cursor:pointer}button[aria-pressed=true]{background:#235a54;border-color:#67d9bf;color:#fff}label{display:flex;align-items:center;gap:6px;font-size:13px;color:#a5bac0}.space{flex:1}button:hover,select:hover{border-color:#7ea6ab}
@@ -17,7 +17,10 @@
  <main class="controls" aria-label="動作の確認">
   <div id="pose" role="status"></div>
   <div class="row" aria-label="攻撃を選ぶ">
-   <button data-stage="-1" aria-pressed="true">4段コンボ</button><button data-stage="0" aria-pressed="false">斜め斬り</button><button data-stage="1" aria-pressed="false">斬り返し</button><button data-stage="2" aria-pressed="false">斬り上げ</button><button data-stage="3" aria-pressed="false">振り下ろし</button>
+   <button data-stage="-1" aria-pressed="true">4段コンボ</button><button data-stage="0" aria-pressed="false">斜め斬り</button><button data-stage="1" aria-pressed="false">斬り返し</button><button data-stage="2" aria-pressed="false">斬り上げ</button><button data-stage="3" aria-pressed="false">振り下ろし</button><button data-stage="4" aria-pressed="false">チャージ攻撃</button>
+  </div>
+  <div class="row" id="charge-controls" hidden>
+   <label>自動の溜め量<select id="charge-level"><option value="1">100%</option><option value=".5">50%</option></select></label><button id="charge-hold">長押しで試す</button>
   </div>
   <div class="row">
    <button id="play">一時停止</button><button id="replay">最初から</button>

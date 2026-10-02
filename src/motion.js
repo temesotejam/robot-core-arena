@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.min.js';
-import {swordMotion} from './sword-motion.js';
+import {swordMotion,swordChargeHold} from './sword-motion.js';
 // Original procedural poses, informed by the two supplied gameplay videos.
 // Weapon counts/intervals remain our game specification, not measurements of the videos.
 export const COMBO_CLIPS={
@@ -37,13 +37,14 @@ function curvePose(a,control,b,t){const out=blendPose(a,b,t);out.position=a.posi
 export function comboClip(kind,stage=0){const clips=COMBO_CLIPS[kind];return clips?.[((stage%clips.length)+clips.length)%clips.length]||'shot';}
 export function motionRhythm(kind,attack={}){
  const r=RHYTHMS[kind]||RHYTHMS.sword;
+ if(kind==='sword'&&attack.charge>0&&!attack.skill)return {...r,contactEnd:.42,follow:.67,advance:r.advance*(1+.35*clamp(attack.charge))};
  return attack.charge>.5?{...r,windup:Math.max(.26,r.windup),advance:r.advance*1.35}:r;
 }
 export function contactPhase(attack){
- // Normal sword poses reach the front target after acceleration. Calibrate
+ // Sword poses reach the front target after acceleration. Calibrate
  // the existing hit arc to that passage, rather than damaging it while the
  // visible blade is still raised beside the shoulder. Range/arc stay intact.
- if(attack.weapon==='sword'&&!attack.charge&&!attack.skill){const overhead=((attack.combo||0)%4+4)%4===3,start=overhead?.30:.27,end=overhead?.47:.45;return clamp((attack.elapsed/attack.duration-start)/(end-start));}
+ if(attack.weapon==='sword'&&!attack.skill){const charged=attack.charge>0,overhead=((attack.combo||0)%4+4)%4===3,start=charged?.28:overhead?.30:.27,end=charged?.42:overhead?.47:.45;return clamp((attack.elapsed/attack.duration-start)/(end-start));}
  const r=motionRhythm(attack.weapon,attack);return clamp((attack.elapsed/attack.duration-r.windup)/(r.contactEnd-r.windup));
 }
 export function stepPhase(attack){const r=motionRhythm(attack.weapon,attack);const start=['rapier','lance'].includes(attack.weapon)?r.windup*1.15:r.windup*.5;return smooth((attack.elapsed/attack.duration-start)/(r.contactEnd-start));}
@@ -110,8 +111,8 @@ function frames(kind,name){
  return {prepare,strike,follow,control:c.control,leftControl:c.leftControl};
 }
 function clipName(kind,attack){return attack.skill==='tech'&&['naginata','scythe'].includes(kind)?'spin':attack.charge>.5&&!['rapier','lance','knuckle'].includes(kind)?['hammer','naginata','scythe'].includes(kind)?'hammerSlam':'overhead':comboClip(kind,attack.combo||0);}
-export function sampleMotion(kind,attack,{nextCombo=null}={}){
- if(kind==='sword'&&(!attack||!attack.charge&&!attack.skill))return swordMotion(attack,{nextCombo});
+export function sampleMotion(kind,attack,{nextCombo=null,charging=null}={}){
+ if(kind==='sword'&&(!attack||!attack.skill)){if(!attack&&charging)return swordChargeHold(charging);return swordMotion(attack,{nextCombo});}
  const base=readyFrame(kind);if(!attack||!COMBO_CLIPS[kind])return {name:'ready',...base};
  const name=clipName(kind,attack),c=frames(kind,name),r=motionRhythm(kind,attack),p=clamp(attack.elapsed/attack.duration),start=attack.blendFrom||base;
  let out;

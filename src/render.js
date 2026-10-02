@@ -69,13 +69,13 @@ function poseLeg(leg,target){
 }
 // Both the hangar and battle use these poses; attachments never need to cancel a shoulder rotation.
 function poseWeapons(ref,u=null,time=0){
- const w=WEAPONS[ref.kind],speed=u?Math.hypot(u.vx,u.vz):0,attack=u?.attack||(u?.motion?.weapon===w.id&&!w.ranged?u.motion:null),motion=sampleMotion(w.id,attack,{nextCombo:u?.queuedAttack?((attack?.combo||0)+1)%w.combo:null}),dual=['dualSword','dualGun','knuckle'].includes(w.id);
+ const w=WEAPONS[ref.kind],speed=u?Math.hypot(u.vx,u.vz):0,attack=u?.attack||(u?.motion?.weapon===w.id&&!w.ranged&&(!u.charging||u.motion.elapsed<u.motion.duration)?u.motion:null),motion=sampleMotion(w.id,attack,{nextCombo:u?.queuedAttack?(w.id==='sword'&&(attack?.charge>0||u.queuedAttack.charge>0)?0:((attack?.combo||0)+1)%w.combo):null,charging:u?.charging?u.chargePose:null}),dual=['dualSword','dualGun','knuckle'].includes(w.id);
  const shot=u?.motion?.weapon===w.id&&w.ranged?u.motion:null,shotProgress=shot?THREE.MathUtils.clamp(shot.elapsed/shot.duration,0,1):0;
  const kick=kind=>({machinegun:.012,assault:.015,dualGun:.020,pistol:.028,shotgun:.035,rifle:.038,sniper:.050,heavyShotgun:.045,bazooka:.052,missile:.030})[kind]||.022;
  const pulse=p=>{if(p<=0||p>=1)return 0;const t=p<.24?p/.24:1-(p-.24)/.76;return t*t*(3-2*t);},recoil=shot?pulse(shotProgress)*kick(w.id):0;
  for(const weapon of ref.weaponAttachments)if(weapon.userData.flash)weapon.userData.flash.visible=!!shot&&shotProgress<.3&&!u.dead&&!u.guard;
  for(const [i,arm]of ref.arms.entries()){
-  if(motion.joints&&!u?.guard&&(!u?.charging||attack)&&!u?.dead&&!(u?.down>0)){poseSwordArm(arm,motion.joints[i?'left':'right']);continue;}
+  if(motion.joints&&!u?.guard&&(!u?.charging||attack||motion.name==='chargeHold')&&!u?.dead&&!(u?.down>0)){poseSwordArm(arm,motion.joints[i?'left':'right']);continue;}
   const side=arm.userData.side,armed=i===0||dual,p=armed&&!w.ranged?(i?motion.left:motion.right):readyPose(w.id,side),target=new THREE.Vector3(...p.position),rotation=new THREE.Euler(...p.rotation);
   if(armed&&w.ranged){const handRecoil=w.id==='dualGun'&&i===1?pulse((shotProgress-.12)/.88)*kick(w.id):recoil;target.z-=handRecoil;target.y+=handRecoil*.22;rotation.x=-handRecoil*(['pistol','shotgun','dualGun'].includes(w.id)?3.2:1.4);}
   if(!attack&&!w.ranged&&speed>.2){target.z+=Math.sin(time*12)*(i?-1:1)*.025;}

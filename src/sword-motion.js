@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 
-// Authored joint poses for the normal sword combo. Angles are radians, distances
+// Authored joint poses for the sword combo and charged cut. Angles are radians, distances
 // are model units. The arm is driven shoulder -> elbow hinge -> forearm roll ->
 // wrist, rather than by a hand target and an automatically chosen elbow.
 const clamp=t=>Math.max(0,Math.min(1,t));
@@ -75,6 +75,29 @@ const cuts=[
 // direction, with its own preparation and recovery timing.
 cuts[1]=[.10,.16,.27,.40,.53,.67].map((time,i)=>[time,cuts[0][[5,4,3,2,1,0][i]][1]]);
 cuts[1][0][1]=blendSword(cuts[0][5][1],cuts[0][4][1],.30);
+const chargeLow=pose(overheadArm(-1.23,1.72),[-.035,0,0],-.08,-.038,[0,-.012],[-.24,.10,.22,1.36,.02,.04,.02]);
+const chargeHigh=pose(overheadArm(-2.16,1.00),[-.075,0,0],-.12,-.055,[.006,-.020],[-.24,.10,.22,1.36,.02,.04,.02],[-.12,.06],[0,.018,-.012]);
+export function swordChargeHold({amount=0,elapsed=0,from=null}={}){
+ // Brief taps keep the ordinary guard. A held input raises the sword and
+ // settles into a loaded pose, which stays still when the gauge is full.
+ const loaded=blendSword(chargeLow,chargeHigh,ease(amount)),out=blendSword(from?.joints?from:ready,loaded,ease((elapsed-.10)/.22));
+ return {...out,name:'chargeHold',chargeAmount:clamp(amount)};
+}
+function swordChargedCut(attack,nextCombo){
+ const amount=clamp(attack.charge),p=clamp(attack.elapsed/attack.duration),start=attack.blendFrom?.joints?attack.blendFrom:swordChargeHold({amount,elapsed:.32});
+ const destination=nextCombo===null?ready:cuts[nextCombo%4][0][1];
+ const out=track([
+  [0,start],
+  [.10,blendSword(start,chargeHigh,.20*amount)],
+  [.18,pose(overheadArm(-1.65,.90),[-.015,0,0],.06,-.065,[0,.014],[-.20,.10,.24,1.38,.02,.04,.02],[-.08,.06],[0,.018,0])],
+  [.30,pose(overheadArm(-.65,.98),[.10,0,0],.18,-.068,[0,.035],[-.08,-.06,.30,1.32,-.05,.04,.02],[.08,.06])],
+  [.42,pose(overheadArm(.60,1.15),[.23,0,0],.22,-.055,[0,.035],[-.03,-.16,.29,1.36,-.12,.04,.02],[.14,.07])],
+  [.53,pose(overheadArm(.85,1.40),[.17,0,0],.20,-.042,[0,.023],[-.10,-.10,.24,1.38,-.08,.04,.02],[.12,.07])],
+  [.67,pose(overheadArm(.70,1.58),[.08,0,0],.12,-.030,[0,.010])],
+  [1,destination],
+ ],p);
+ return plantSword(out,attack,'chargeCut');
+}
 function cubic(values,times,t){
  const [a,b,c,d]=values,[ta,tb,tc,td]=times,span=tc-tb,t2=t*t,t3=t2*t;
  return b.map((v,i)=>{
@@ -101,14 +124,20 @@ function track(keys,p){
 }
 export function swordMotion(attack,{nextCombo=null}={}){
  if(!attack)return {name:'ready',...ready};
+ if(attack.charge>0)return swordChargedCut(attack,nextCombo);
  const stage=((attack.combo||0)%4+4)%4,p=clamp(attack.elapsed/attack.duration),start=attack.blendFrom?.joints?attack.blendFrom:ready;
  // Queued cuts keep the winding posture; no excursion through the idle guard.
  const destination=nextCombo===null?ready:cuts[(nextCombo+4)%4][0][1];
  const keys=[[0,start],...cuts[stage].filter(([time])=>!attack.blendFrom?.joints||time!==.10),[1,destination]],out=track(keys,p);
+ return plantSword(out,attack,names[stage]);
+}
+function plantSword(out,attack,name){
+ const p=clamp(attack.elapsed/attack.duration);
  // Foot placement is in the attack's starting frame. Rendering subtracts actual
  // travelled distance, so a planted foot stays on the ground while the root moves.
- const lead=ease((p-.08)/.25),rear=ease((p-.28)/.35),feet=out.feet.map(v=>[...v]);
- if(p>.08&&p<.33)feet[1][1]+=.037*Math.sin(Math.PI*(p-.08)/.25);
- if(p>.28&&p<.63)feet[0][1]+=.030*Math.sin(Math.PI*(p-.28)/.35);
- return {...out,name:names[stage],feet,footStride:[rear,lead],plantOrigin:attack.origin,plantYaw:attack.yaw};
+ const charged=attack.charge>0,leadStart=charged?.05:.08,leadSpan=charged?.22:.25,rearStart=charged?.27:.28,rearSpan=charged?.25:.35;
+ const lead=ease((p-leadStart)/leadSpan),rear=ease((p-rearStart)/rearSpan),feet=out.feet.map(v=>[...v]);
+ if(p>leadStart&&p<leadStart+leadSpan)feet[1][1]+=.037*Math.sin(Math.PI*(p-leadStart)/leadSpan);
+ if(p>rearStart&&p<rearStart+rearSpan)feet[0][1]+=.030*Math.sin(Math.PI*(p-rearStart)/rearSpan);
+ return {...out,name,feet,footStride:[rear,lead],plantOrigin:attack.origin,plantYaw:attack.yaw};
 }
