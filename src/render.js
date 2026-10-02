@@ -20,6 +20,9 @@ function glow(w,h,d,color,x=0,y=0,z=0){const mesh=box(w,h,d,color,x,y,z);mesh.ma
 function cylinder(radius,height,color,x=0,y=0,z=0,sides=12){const mesh=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,height,sides),material(color));mesh.position.set(x,y,z);mesh.castShadow=true;return mesh;}
 function sphere(radius,color,x,y,z){const mesh=new THREE.Mesh(new THREE.SphereGeometry(radius,10,6),material(color));mesh.position.set(x,y,z);return mesh;}
 function weaponModel(kind,team){const group=new THREE.Group(),w=WEAPONS[kind],metal='#b7c9d4',dark='#263746',accent=team?'#ffac72':'#77f6d6';group.name=`weapon:${kind}`;
+ // Fixed edge orientation in the grip; normal cuts do not rotate the weapon
+ // independently from its hand. The blade's local X axis is its cutting edge.
+ if(kind==='sword')group.rotation.y=-Math.PI/2;
  // Model origin is the centre of the grip, shared with the hand socket.
  if(!w.ranged){if(kind!=='knuckle')group.add(box(.035,.16,.04,dark));if(kind==='knuckle'){group.add(armor(.15,.12,.15,dark,0,0,.055),glow(.12,.015,.12,accent,0,.06,.055));}
   else if(kind==='hammer'){group.add(box(.035,.5,.04,'#607482',0,.23,0),armor(.32,.15,.18,metal,0,.49,0),glow(.28,.02,.19,accent,0,.51,0));}
@@ -167,15 +170,19 @@ export class ArenaRenderer{
  animateRobot(ref,u,time){
   const speed=Math.hypot(u.vx,u.vz),stride=Math.sin(time*(u.dashTime>0?28:12));ref.root.position.set(u.x,u.y,u.z);ref.root.rotation.y=u.yaw;ref.root.visible=true;ref.ring.visible=!u.dead;ref.root.scale.setScalar(u.dead?.65:1);
   if(ref.active!==u.active){ref.active=u.active;ref.changeWeapons(u.config.sets[u.active]);}
-  const motion=poseWeapons(ref,u,time),canPose=!u.dead&&!(u.down>0),reaction=u.hitReaction,reactionWeight=reaction?Math.sin(Math.PI*Math.min(1,reaction.elapsed/reaction.duration)):0,relative=reaction?(reaction.yaw-u.yaw):0;
+  const motion=poseWeapons(ref,u,time),canPose=!u.dead&&!(u.down>0),attack=u.attack||u.motion;
+  // The visible cutting plane follows the same committed yaw as the hit arc.
+  // Turn back toward a moving lock target smoothly during recovery.
+  let facing=u.yaw;if(canPose&&motion.sword&&motion.plantYaw!==undefined){const p=attack.elapsed/attack.duration,t=THREE.MathUtils.smoothstep(p,.53,1);facing=motion.plantYaw+Math.atan2(Math.sin(u.yaw-motion.plantYaw),Math.cos(u.yaw-motion.plantYaw))*t;}ref.root.rotation.y=facing;
+  const reaction=u.hitReaction,reactionWeight=reaction?Math.sin(Math.PI*Math.min(1,reaction.elapsed/reaction.duration)):0,relative=reaction?(reaction.yaw-facing):0;
   ref.bodyPivot.rotation.set(u.dead?Math.PI/3:u.down>0?.9:motion.body[0]+(u.dashTime>0?.13:0)+Math.cos(relative)*(reaction?.strength||0)*reactionWeight,canPose?motion.body[1]:0,u.dead?.8:u.status==='stun'?Math.sin(time*30)*.03:canPose?motion.body[2]-Math.sin(relative)*(reaction?.strength||0)*reactionWeight:0);
   const drop=canPose?motion.drop:0,shift=canPose?motion.shift:[0,0];ref.bodyPivot.position.set(shift[0],.36+drop,shift[1]);ref.legGroup.position.set(shift[0]*.5,motion.sword&&ref.legFrame==='panzer'?0:drop,shift[1]*.6);const hipYaw=canPose&&ref.legFrame!=='panzer'?motion.hipYaw:0;ref.legGroup.rotation.y=hipYaw;
   const footTargets=ref.feet.map((leg,i)=>{
    const foot=new THREE.Vector3(...motion.feet[i]);
    if(canPose&&u.grounded&&motion.plantOrigin&&!u.guard){
-    const travel=new THREE.Vector3(u.x-motion.plantOrigin[0],0,u.z-motion.plantOrigin[2]).applyAxisAngle(new THREE.Vector3(0,1,0),-(motion.plantYaw??u.yaw));
+    const travel=new THREE.Vector3(u.x-motion.plantOrigin[0],0,u.z-motion.plantOrigin[2]).applyAxisAngle(new THREE.Vector3(0,1,0),-(motion.plantYaw??facing));
     const a=u.attack||u.motion,r=motionRhythm('sword',a),p=Math.min(1,a.elapsed/a.duration),t=Math.max(0,Math.min(1,(p-r.windup*.5)/(r.contactEnd-r.windup*.5))),phase=t*t*(3-2*t),distance=Math.min(r.advance,Math.max(0,travel.z)/Math.max(.001,phase));
-    foot.z+=distance*motion.footStride[i];foot.sub(travel).applyAxisAngle(new THREE.Vector3(0,1,0),(motion.plantYaw??u.yaw)-u.yaw);
+    foot.z+=distance*motion.footStride[i];foot.sub(travel).applyAxisAngle(new THREE.Vector3(0,1,0),(motion.plantYaw??facing)-facing);
    }
    if(!canPose)foot.set(leg.userData.side*.105,.035,.045);
    else if(!u.grounded){foot.y+=.075;foot.z-=.055;}
@@ -190,7 +197,7 @@ export class ArenaRenderer{
     settle=Math.max(settle,-ankle.y-vertical);
    }settle=Math.min(.10,settle);ref.legGroup.position.y-=settle;ref.bodyPivot.position.y-=settle;
   }
-  for(const [i,leg]of ref.feet.entries())if(leg.knee){const foot=footTargets[i].clone().sub(ref.legGroup.position).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw);poseLeg(leg,foot);leg.foot.rotation.y=(motion.footYaw[i]||0)-hipYaw+(canPose&&u.grounded&&motion.plantOrigin&&!u.guard?(motion.plantYaw??u.yaw)-u.yaw:0);}
+  for(const [i,leg]of ref.feet.entries())if(leg.knee){const foot=footTargets[i].clone().sub(ref.legGroup.position).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw);poseLeg(leg,foot);leg.foot.rotation.y=(motion.footYaw[i]||0)-hipYaw+(canPose&&u.grounded&&motion.plantOrigin&&!u.guard?(motion.plantYaw??facing)-facing:0);}
   ref.head.rotation.y=canPose?-motion.body[1]*(motion.sword?.75:.28):0;ref.head.rotation.x=canPose?-motion.body[0]*(motion.sword?.65:.20):0;ref.ring.material.opacity=u.buffTime>0?.85:.45;updateTrails(ref,u,time,motion.name);
  }
 

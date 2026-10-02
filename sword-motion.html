@@ -13,7 +13,7 @@
 </head>
 <body>
  <canvas id="arena"></canvas>
- <header><h1>ソードの動き</h1><p>ドラッグで回転 · ホイールで拡大</p></header><a href="./">ゲームへ戻る →</a>
+ <header><h1>ソードの動き</h1><p>半透明の固定標的で刃の向きを確認 · ドラッグで回転</p></header><a href="./">ゲームへ戻る →</a>
  <main class="controls" aria-label="動作の確認">
   <div id="pose" role="status"></div>
   <div class="row" aria-label="攻撃を選ぶ">
@@ -24,6 +24,7 @@
    <label>速度<select id="speed"><option value="1">等速</option><option value=".5">½</option><option value=".25">¼</option></select></label>
    <span class="space"></span>
    <label>カメラ<select id="camera"><option value="threequarter">斜め</option><option value="front">正面</option><option value="side">側面</option><option value="rear">背面</option></select></label>
+   <label>標的<select id="target"><option value="1">あり</option><option value="0">なし</option></select></label>
    <label>盾<select id="shield"><option value="1">あり</option><option value="0">なし</option></select></label>
   </div>
  </main>

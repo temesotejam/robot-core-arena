@@ -52,17 +52,20 @@ await motionPage.evaluate(async kinds=>{
 }
 // Sword review uses the real standalone viewer and actual travelled distance.
 // Record equal speed and quarter speed, then inspect all four cuts from three
-// cameras at preparation, contact and exit, with a shield fitted.
+// cameras at preparation, blade passage and exit, with a shield and a visible
+// fixed target fitted. This checks their spatial relationship, not only poses.
 const swordPage=await browser.newPage({viewport:{width:1100,height:800},recordVideo:{dir:'artifacts',size:{width:1100,height:800}}});swordPage.on('pageerror',e=>errors.push(e.message));
 await swordPage.goto('http://127.0.0.1:4173/sword-motion.html');await swordPage.locator('#pose').waitFor();
 await swordPage.locator('#replay').click();await swordPage.waitForTimeout(3000);
 await swordPage.locator('#speed').selectOption('.25');await swordPage.locator('#camera').selectOption('side');await swordPage.locator('#replay').click();await swordPage.waitForTimeout(9200);
 await swordPage.locator('#play').click();const frozen=await swordPage.evaluate(async()=>(await import('/src/sword-preview.js')).swordPreview.battle.time);await swordPage.waitForTimeout(120);assert.equal(await swordPage.evaluate(async()=>(await import('/src/sword-preview.js')).swordPreview.battle.time),frozen);
-for(const view of ['front','side','rear'])for(let combo=0;combo<4;combo++)for(const p of [.16,.40,.53]){
+for(const view of ['front','side','rear'])for(let combo=0;combo<4;combo++)for(const p of [.16,.35,.53]){
  await swordPage.locator('#camera').selectOption(view);await swordPage.locator(`[data-stage="${combo}"]`).click();
  await swordPage.evaluate(async p=>{const v=(await import('/src/sword-preview.js')).swordPreview,b=v.battle,u=b.human;b.attack(u);b.meleeStep(u,u.attack.duration*p);v.draw();},p);
  await swordPage.screenshot({path:`artifacts/sword-${view}-${combo}-${Math.round(p*100)}.png`});
 }
+assert(await swordPage.evaluate(async()=>{const v=(await import('/src/sword-preview.js')).swordPreview;return v.targetModel.root.visible&&v.battle.entities[1].y===0&&v.battle.human.target===v.battle.entities[1].id;}));
+await swordPage.locator('#target').selectOption('0');assert(await swordPage.evaluate(async()=>!(await import('/src/sword-preview.js')).swordPreview.targetModel.root.visible));await swordPage.locator('#target').selectOption('1');
 await swordPage.locator('#shield').selectOption('0');assert(await swordPage.evaluate(async()=>!(await import('/src/sword-preview.js')).swordPreview.model.hasShield));
 await swordPage.setViewportSize({width:390,height:844});assert(await swordPage.locator('.controls').evaluate(el=>el.getBoundingClientRect().right<=innerWidth));await swordPage.evaluate(async()=>{const v=(await import('/src/sword-preview.js')).swordPreview;v.draw();const u=v.battle.human,foot=v.renderer.project(u.x,u.y+.035,u.z),panel=document.querySelector('.controls').getBoundingClientRect();if(foot.y>=panel.top-10)throw Error('Sword preview feet hidden by mobile controls');});await swordPage.screenshot({path:'artifacts/sword-mobile.png'});
 const swordVideo=swordPage.video();await swordPage.close();await swordVideo.saveAs('artifacts/sword-review.webm');

@@ -6,6 +6,7 @@ import {swordArm} from '../src/sword-motion.js';
 import {createRobot,ArenaRenderer} from '../src/render.js';
 import {defaultConfig} from '../src/customize.js';
 import {CATALOG,PARTS} from '../src/data.js';
+import {Battle} from '../src/sim.js';
 
 function rig(frame='knight'){
  const config=defaultConfig();config.armor=Object.fromEntries(PARTS.map(p=>[p,`armor:${frame}:${p}`]));
@@ -50,9 +51,11 @@ test('通常ソードの刃の中心線は全5フレームで胴・頭・盾を�
   const {ref,u}=rig(frame),meshes=[];
   ref.bodyPivot.children[0].traverse(m=>{if(!m.isMesh)return;for(let p=m;p&&p!==ref.bodyPivot;p=p.parent)if(ref.arms.includes(p))return;meshes.push(m);});
   const shield=ref.weaponAttachments.find(w=>w.name==='shield');if(shield)shield.traverse(m=>{if(m.isMesh)meshes.push(m);});
-  for(let combo=0;combo<4;combo++)for(let i=0;i<=240;i++){
-   at(ref,u,combo,i/240);const w=ref.weaponAttachments[0],a=w.localToWorld(new THREE.Vector3(0,.105,0)),b=w.localToWorld(new THREE.Vector3(0,.57,0)),dir=b.clone().sub(a),ray=new THREE.Raycaster(a,dir.clone().normalize(),0,dir.length());
+  for(const queued of [false,true]){let from=null;u.queuedAttack=queued?{remaining:.1}:null;
+  for(let combo=0;combo<4;combo++){for(let i=0;i<=240;i++){
+   at(ref,u,combo,i/240,{blendFrom:from});const w=ref.weaponAttachments[0],a=w.localToWorld(new THREE.Vector3(0,.105,0)),b=w.localToWorld(new THREE.Vector3(0,.57,0)),dir=b.clone().sub(a),ray=new THREE.Raycaster(a,dir.clone().normalize(),0,dir.length());
    assert.equal(ray.intersectObjects(meshes,false).length,0,`${frame} ${combo} ${i}: 刃が自機を貫通`);assert(b.y>=.02,`${frame} ${combo} ${i}: 剣先が床を貫通`);if(frame==='panzer')for(const leg of ref.feet)assert(new THREE.Box3().setFromObject(leg).min.y>=.02,'履帯を床の上に残す');
+  }if(queued)from=sampleMotion('sword',{combo,elapsed:1,duration:1,blendFrom:from},{nextCombo:(combo+1)%4});}
   }
  }
 });
@@ -64,4 +67,29 @@ test('ソードのコンボ接続は肩・肘・手首・骨盤の全チャン�
  // The final cut rotates the blade down; moving a vertical sword downwards
  // with the hand alone does not satisfy the authored overhead motion.
  const {ref,u}=rig();at(ref,u,3,.53);const w=ref.weaponAttachments[0],tip=w.localToWorld(new THREE.Vector3(0,.57,0)),hand=w.getWorldPosition(new THREE.Vector3());assert(tip.y<hand.y);assert(tip.z>hand.z+.4);
+});
+
+function bladeCrossesTarget(ref,yaw){
+ const w=ref.weaponAttachments[0],inverse=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),-yaw),a=w.localToWorld(new THREE.Vector3(0,.10,0)).applyQuaternion(inverse),b=w.localToWorld(new THREE.Vector3(0,.57,0)).applyQuaternion(inverse),d=b.clone().sub(a),target=new THREE.Box3(new THREE.Vector3(-.20,.30,.73),new THREE.Vector3(.20,.94,1.07)),hit=new THREE.Ray(a,d.clone().normalize()).intersectBox(target,new THREE.Vector3());
+ return !!hit&&hit.distanceTo(a)<=d.length();
+}
+test('4段とも前方の標的を刃で横切り、追尾中も命中判定と同じ方向へ振る',()=>{
+ for(const frame of ['knight','strider','brawler','wild','panzer'])for(const yaw of [0,.8,-1.4])for(let combo=0;combo<4;combo++){
+  const {ref,u}=rig(frame);let crossed=false;
+  const sample=p=>{const a={weapon:'sword',combo,elapsed:p,duration:1},travel=.24*stepPhase(a);u.x=Math.sin(yaw)*travel;u.z=Math.cos(yaw)*travel;u.yaw=yaw+.25*Math.sin(p*7);at(ref,u,combo,p,{origin:[0,0,0],yaw});return ref.weaponAttachments[0].localToWorld(new THREE.Vector3(0,.57,0));};
+  for(let p=.30;p<=.44+1e-9;p+=.01){
+   const velocity=sample(p+.0001).sub(sample(p-.0001)).normalize();sample(p);const q=ref.weaponAttachments[0].getWorldQuaternion(new THREE.Quaternion()),edge=new THREE.Vector3(1,0,0).applyQuaternion(q),flat=new THREE.Vector3(0,0,1).applyQuaternion(q);
+   assert(Math.abs(edge.dot(velocity))>.70,`${frame} ${combo} ${p}: 刃が進行方向を向かない`);assert(Math.abs(flat.dot(velocity))<.16,`${frame} ${combo} ${p}: 刃の面で叩く`);assert(Math.abs(ref.root.rotation.y-yaw)<1e-8,'斬撃中に追尾で命中判定から向きがずれる');crossed||=bladeCrossesTarget(ref,yaw);
+  }
+  assert(crossed,`${frame} ${combo}: 前方の相手を剣が通過しない`);
+ }
+ const ready=new THREE.Quaternion().fromArray(sampleMotion('sword',null).joints.right.wrist);
+ for(let combo=0;combo<4;combo++)for(let i=0;i<=240;i++){const j=sampleMotion('sword',{combo,elapsed:i/240,duration:1}).joints.right;assert(ready.angleTo(new THREE.Quaternion().fromArray(j.wrist))<.09,'途中で握りを大きく変える');assert(Math.abs(j.roll)<.7,'前腕の大きなひねりで刃を返す');}
+});
+test('正面の相手への実際のソード命中は、表示された刃が標的を通過する時点に起きる',()=>{
+ for(const yaw of [0,.8,-1.4])for(let combo=0;combo<4;combo++){
+  const config=defaultConfig(),b=new Battle({allies:[config],enemies:[defaultConfig()],setup:{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true},getItem:id=>CATALOG[id]}),u=b.human,v=b.entities[1],ref=createRobot(config,id=>CATALOG[id]);ref.active=0;Object.assign(u,{x:0,y:0,z:0,yaw,combo:(combo+3)%4,comboWindow:1});Object.assign(v,{x:.9*Math.sin(yaw),y:0,z:.9*Math.cos(yaw)});u.target=v.id;b.attack(u);b.consumeEvents();let hit=false;
+  for(let i=0;i<120&&u.attack;i++){const a=u.attack;b.meleeStep(u,1/120);const events=b.consumeEvents();if(events.some(e=>e.type==='hit'&&e.attacker===u.id)){ArenaRenderer.prototype.animateRobot.call({},ref,u,a.elapsed);ref.root.updateMatrixWorld(true);assert(bladeCrossesTarget(ref,yaw),`${combo} ${a.elapsed/a.duration}: 見える剣が届く前に命中`);hit=true;break;}}
+  assert(hit,'正面の相手に命中しない');
+ }
 });

@@ -39,7 +39,13 @@ export function motionRhythm(kind,attack={}){
  const r=RHYTHMS[kind]||RHYTHMS.sword;
  return attack.charge>.5?{...r,windup:Math.max(.26,r.windup),advance:r.advance*1.35}:r;
 }
-export function contactPhase(attack){const r=motionRhythm(attack.weapon,attack);return clamp((attack.elapsed/attack.duration-r.windup)/(r.contactEnd-r.windup));}
+export function contactPhase(attack){
+ // Normal sword poses reach the front target after acceleration. Calibrate
+ // the existing hit arc to that passage, rather than damaging it while the
+ // visible blade is still raised beside the shoulder. Range/arc stay intact.
+ if(attack.weapon==='sword'&&!attack.charge&&!attack.skill){const overhead=((attack.combo||0)%4+4)%4===3,start=overhead?.30:.27,end=overhead?.47:.45;return clamp((attack.elapsed/attack.duration-start)/(end-start));}
+ const r=motionRhythm(attack.weapon,attack);return clamp((attack.elapsed/attack.duration-r.windup)/(r.contactEnd-r.windup));
+}
 export function stepPhase(attack){const r=motionRhythm(attack.weapon,attack);const start=['rapier','lance'].includes(attack.weapon)?r.windup*1.15:r.windup*.5;return smooth((attack.elapsed/attack.duration-start)/(r.contactEnd-start));}
 export function swingDirection(kind,stage){return ['slashBack','crossBack','retreatCut','sweepBack','leftReturn','leftDiagonal'].includes(comboClip(kind,stage))?-1:1;}
 export function readyPose(kind,side){
