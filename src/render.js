@@ -66,7 +66,7 @@ function poseWeapons(ref,u=null,time=0){
   if(!attack&&!w.ranged&&speed>.2){target.z+=Math.sin(time*12)*(i?-1:1)*.025;}
   if(u?.charging&&!w.ranged&&!attack&&i===0){target.y+=.10;rotation.x-=.6*Math.min(1,u.charge/(w.charge||1));}
   if(i===1&&ref.hasShield)target.set(.28,.43,.14);
-  if(u?.guard){if(i===1)target.set(.18,.54,.25);else if(!w.ranged){target.set(-.23,.51,.21);rotation.x=w.id==='knuckle'?0:.75;}}
+  if(u?.guard){if(i===1)target.set(.18,w.id==='knuckle'?.68:.54,.25);else if(!w.ranged){target.set(-.23,w.id==='knuckle'?.68:.51,.21);rotation.x=w.id==='knuckle'?0:.75;}}
   poseArm(arm,target,rotation);
  }
  const supportGrip=ref.weaponAttachments[0].userData.supportGrip;

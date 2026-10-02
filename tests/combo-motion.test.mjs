@@ -90,10 +90,11 @@ test('命中した方向へ被弾姿勢を付け、時間経過で消え、ポ�
 
 test('パンチで足を毎回入れ替えず、反対の手を構えに残す',()=>{
  const base=sampleMotion('knuckle',null);
+ for(const hand of ['right','left'])assert(base[hand].position[1]>=.66,'拳を肩・顎に近い高さへ構える');
  for(let combo=0;combo<6;combo++)for(let i=0;i<=60;i++){
   const p=sampleMotion('knuckle',{combo,elapsed:i/60,duration:1}),guard=combo===1||combo===3?'right':'left';
   for(let foot=0;foot<2;foot++){assert.equal(p.feet[foot][0],base.feet[foot][0]);assert.equal(p.feet[foot][2],base.feet[foot][2]);assert(p.feet[foot][1]<=.043+1e-8);}
-  assert(new THREE.Vector3(...p[guard].position).distanceTo(new THREE.Vector3(...base[guard].position))<1e-8);assert(p.left.position[1]>=.54-1e-8||guard==='right');
+  assert(new THREE.Vector3(...p[guard].position).distanceTo(new THREE.Vector3(...base[guard].position))<1e-8);assert(p[guard].position[1]>=.66);
  }
 });
 test('全近接の手首が回転の折り返しで飛ばず、突きは胴を直立させる',()=>{

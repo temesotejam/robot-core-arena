@@ -46,7 +46,7 @@ export function readyPose(kind,side){
  if(ranged&&(side===-1||dual))return pose([dual?side*.24:['pistol','machinegun','shotgun'].includes(kind)?-.24:-.065,dual||['pistol','machinegun','shotgun'].includes(kind)?.52:.49,.18],[0,0,0]);
  if(side===-1&&twoHand)return pose([-.05,.48,.16],[.75,0,.15]);
  if(side===-1&&['rapier','lance'].includes(kind))return pose([-.27,.43,.18],[Math.PI/2,0,.06]);
- if(kind==='knuckle')return pose([side*.23,.54,side===1?.19:.15],[0,0,0]);
+ if(kind==='knuckle')return pose([side*.20,.68,side===1?.19:.15],[0,0,0]);
  if(side===-1||dual)return pose([side*.27,.32,.08],[.55,0,-side*.35]);
  return pose([side*.25,.44,.17],[.4,0,.25]);
 }
@@ -61,10 +61,10 @@ function clipPoses(name,kind){
  let leftPrepare=left,leftStrike=left,leftFollow=left,leftControl=left.position;
  if(kind==='dualSword'){const mirror=p=>pose(p.position.map((x,i)=>i===0?-x:x),p.rotation.map((x,i)=>i===2?-x:x));leftPrepare=mirror(prepare);leftStrike=mirror(strike);leftFollow=mirror(follow);leftControl=control.map((x,i)=>i===0?-x:x);}
  if(kind==='knuckle'){
-  const leftPunch=name==='jabLeft',upper=name==='uppercut';prepare=readyPose(kind,-1);strike=pose([-.18,upper?.66:.55,.36],[upper?.28:0,0,upper?0:.25]);follow=pose([-.22,.55,.20],[0,0,0]);control=upper?[-.24,.44,.31]:[-.23,.55,.28];body=[upper?-.025:.025,leftPunch?-.16:.29,0];
+  const leftPunch=name==='jabLeft',upper=name==='uppercut';prepare=readyPose(kind,-1);strike=pose([-.18,upper?.78:.68,.36],[upper?.28:0,0,upper?0:.25]);follow=pose([-.20,.68,.20],[0,0,0]);control=upper?[-.24,.48,.31]:[-.20,.68,.28];body=[upper?-.025:.025,leftPunch?-.16:.29,0];
   if(upper)prepare=pose([-.25,.44,.18],[.3,0,0]);
-  if(leftPunch){leftPrepare=left;leftStrike=pose([.18,.55,.36],[0,0,-.25]);leftFollow=pose([.22,.55,.20],[0,0,0]);leftControl=[.23,.55,.28];prepare=readyPose(kind,-1);strike=prepare;follow=prepare;control=prepare.position;}
-  if(name==='hook'){prepare=pose([-.24,.56,.17],[0,0,.1]);strike=pose([-.04,.56,.31],[0,0,-.65]);follow=pose([-.18,.56,.24],[0,0,-.25]);control=[-.34,.57,.31];body[1]=.38;}
+  if(leftPunch){leftPrepare=left;leftStrike=pose([.18,.68,.36],[0,0,-.25]);leftFollow=pose([.20,.68,.20],[0,0,0]);leftControl=[.20,.68,.28];prepare=readyPose(kind,-1);strike=prepare;follow=prepare;control=prepare.position;}
+  if(name==='hook'){prepare=pose([-.24,.68,.17],[0,0,.1]);strike=pose([-.04,.68,.31],[0,0,-.65]);follow=pose([-.18,.68,.24],[0,0,-.25]);control=[-.34,.69,.31];body[1]=.38;}
  }
  if(name==='crossFinish'){prepare=pose([-.28,.72,.10],[.1,0,.55]);strike=pose([-.11,.45,.32],[1.9,0,-.6]);follow=pose([-.16,.41,.22],[2.1,0,-.4]);control=[-.27,.67,.39];leftPrepare=pose([.28,.72,.10],[.1,0,-.55]);leftStrike=pose([.11,.45,.32],[1.9,0,.6]);leftFollow=pose([.16,.41,.22],[2.1,0,.4]);leftControl=[.27,.67,.39];body=[.12,0,0];}
  return {prepare,strike,follow,control,leftPrepare,leftStrike,leftFollow,leftControl,body};
