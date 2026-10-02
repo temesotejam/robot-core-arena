@@ -12,8 +12,9 @@ try{
  let previous=performance.now(),accumulator=0,hudClock=0;
  function frame(now){const dt=Math.min(.1,(now-previous)/1000);previous=now;const input=controls.poll(dt),menu=app.handleMenuInput(input),b=app.view==='battle'?app.battle:null;
   if(b&&!b.finished){accumulator=Math.min(.1,accumulator+dt);const movement=renderer.movement(input.x,input.z);let first=true;while(accumulator>=1/60){const command=first?{...input,...movement}:{...input,...movement,jumpPressed:false,dashPressed:false,switchPressed:false};b.tick(1/60,menu||app.modalType?{}:command);accumulator-=1/60;first=false;}
-   for(const event of b.consumeEvents())app.onEvent(event);hudClock+=dt;if(hudClock>=.1){app.hudUpdate();hudClock=0;}
+   hudClock+=dt;if(hudClock>=.1){app.hudUpdate();hudClock=0;}
   }else accumulator=0;
+  if(b)for(const event of b.consumeEvents())app.onEvent(event);
   renderer.render(app.view==='battle'?app.battle:null,dt,now/1000);app.hudFrame();requestAnimationFrame(frame);
  }
  requestAnimationFrame(frame);

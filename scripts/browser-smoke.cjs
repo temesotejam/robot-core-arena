@@ -17,4 +17,4 @@ await page.evaluate(async()=>{const {app}=await import('/src/main.js');for(const
 await page.reload();await page.locator('.home-copy').waitFor();assert.equal(await page.evaluate(async()=> (await import('/src/main.js')).app.state.records.wins),1);
 await page.setViewportSize({width:390,height:844});await page.screenshot({path:'artifacts/mobile-home.png'});await page.locator('.nav [data-view="custom"]').click();await page.locator('[data-action="customTab"][data-id="core"]').click();await page.screenshot({path:'artifacts/mobile-core.png'});
 assert.deepEqual(errors,[]);console.log('Browser smoke passed: WebGL, screens, 94 cells, 3v3, movement, pause, 88 rewards, persistent reload and mobile layout.');
-}catch(e){console.error(e);process.exitCode=1;}finally{await browser?.close();server.kill();}})();
+}catch(e){console.error(e);if(browser){const pages=browser.contexts().flatMap(c=>c.pages());for(const p of pages){console.error('Page state:',await p.locator('body').innerText().catch(()=>''));await p.screenshot({path:'artifacts/failure.png'}).catch(()=>{});}}process.exitCode=1;}finally{await browser?.close();server.kill();}})();
