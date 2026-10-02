@@ -1,4 +1,4 @@
-import {swordSpinAngle} from './sword-motion.js';
+import {swordSpinAngle,swordSpinTurn} from './sword-motion.js';
 import {WEAPONS,SPECIALS,STAGES,DIFFICULTIES,STATUS} from './data.js';
 import {aggregate,cost,clone} from './customize.js';
 import {contactPhase,motionRhythm,stepPhase,swingDirection,sampleMotion} from './motion.js';
@@ -126,13 +126,13 @@ export class Battle{
   if(v.lp<=0){this.kill(v,u);return actual;}
   if(!guard&&!packet.exhausted){this.react(u,v,packet,share);this.statusRoll(u,v,packet,group);}return actual;
  }
- interruptAttack(v){if(v.attack){this.runtime(v).cooldown=Math.min(this.runtime(v).cooldown,INTERRUPT_RECOVERY);}v.attack=null;v.motion=null;v.queuedAttack=null;v.actionTime=0;v.charging=false;v.charge=0;v.chargePose=null;v.comboWindow=0;}
+ interruptAttack(v){if(v.attack?.weapon==='sword'&&v.attack.charge>0&&!v.attack.skill)v.yaw=v.attack.yaw+Math.PI*2*swordSpinTurn(v.attack.elapsed/v.attack.duration);if(v.attack){this.runtime(v).cooldown=Math.min(this.runtime(v).cooldown,INTERRUPT_RECOVERY);}v.attack=null;v.motion=null;v.queuedAttack=null;v.actionTime=0;v.charging=false;v.charge=0;v.chargePose=null;v.comboWindow=0;}
  react(u,v,p,share=1){if(v.statusTime>0)return;const w=p.weapon,buff=this.activeBuff(v);if(buff?.weapon==='hammer'&&(v.attack||v.actionTime>0))return;if(absorbImpact(v.attack,p,share)){if(v.hitReaction)v.hitReaction.strength*=.25;this.event('brace',{unit:v.id,remaining:v.attack.poise.remaining,max:v.attack.poise.max});return;}if(p.skill==='tech'&&w==='knuckle'||w==='knuckle'&&p.finisher){this.interruptAttack(v);if(v.grounded){v.grounded=false;v.jumpsUsed=Math.max(v.jumpsUsed,1);v.vy=Math.sqrt(2*GRAVITY*1.2);v.stun=.15;}else v.stun=Math.max(v.stun,.1);}
   else if(p.finisher||w==='bazooka'){let force=['hammer','bazooka'].includes(w)?3.4:1.7;if(this.activeBuff(u)&&['hammer','shotgun','heavyShotgun'].includes(w))force*=1.4;this.move(v,Math.sin(u.yaw)*force,Math.cos(u.yaw)*force,0);this.knockDown(v);}
   else if(!['machinegun','assault','dualGun','missile'].includes(w)||v.attack?.poise?.remaining===0){v.stun=Math.max(v.stun,w==='sniper'||p.charge>.9?.3:Math.min(.25,u.stats.weapon.interval*.6));this.interruptAttack(v);}
  }
  knockDown(u){u.status=null;u.statusTime=0;u.stun=0;u.down=.8;u.rise=0;u.guard=false;this.interruptAttack(u);this.schedule(.8,()=>{if(!u.dead){u.rise=.6;u.statusImmune=1;}});}
- kill(v,u){v.dead=true;v.lp=0;v.attack=null;v.guard=false;v.target=null;u.kills++;this.event('kill',{unit:v.id,attacker:u.id,x:v.x,y:v.y,z:v.z});for(const e of this.entities)if(e.target===v.id)e.target=null;if(v.human){this.observed=this.entities.find(e=>e.team===0&&!e.dead)||v;this.event('spectate',{unit:this.observed.id});}}
+ kill(v,u){if(v.attack?.weapon==='sword'&&v.attack.charge>0&&!v.attack.skill)this.interruptAttack(v);v.dead=true;v.lp=0;v.attack=null;v.guard=false;v.target=null;u.kills++;this.event('kill',{unit:v.id,attacker:u.id,x:v.x,y:v.y,z:v.z});for(const e of this.entities)if(e.target===v.id)e.target=null;if(v.human){this.observed=this.entities.find(e=>e.team===0&&!e.dead)||v;this.event('spectate',{unit:this.observed.id});}}
  explode(b,pos,direct=null){const u=this.entities.find(u=>u.id===b.owner);if(!u)return;this.event('explosion',{x:pos.x,y:pos.y,z:pos.z,radius:b.blast});for(const v of this.enemiesOf(u)){const d=Math.hypot(v.x-pos.x,v.y+.55-pos.y,v.z-pos.z);if(d>b.blast+.3&&v!==direct)continue;if(v!==direct&&!lineClear(this.stage,{x:pos.x,y:Math.max(.06,pos.y),z:pos.z},{x:v.x,y:v.y+.55,z:v.z}))continue;const factor=v===direct?1:lerp(1,.3,clamp(d/b.blast,0,1));this.hit(u,v,b.packet,b.share*factor,pos,b.group);}}
  projectileStep(b,dt){const u=this.entities.find(u=>u.id===b.owner);if(!u)return false;b.life-=dt;if(b.life<=0||b.travel>=b.range)return false;
   if(b.homing){const t=this.entities.find(u=>u.id===b.target&&!u.dead);if(t){const dir=normalized(t.x-b.x,t.y+.5-b.y,t.z-b.z),current=normalized(b.vx,b.vy,b.vz),blend=clamp(b.homing*dt,0,1),n=normalized(lerp(current.x,dir.x,blend),lerp(current.y,dir.y,blend),lerp(current.z,dir.z,blend));b.vx=n.x*b.speed;b.vy=n.y*b.speed;b.vz=n.z*b.speed;}}
