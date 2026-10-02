@@ -52,7 +52,7 @@ test('通常ソードの刃の中心線は全5フレームで胴・頭・盾を�
   const shield=ref.weaponAttachments.find(w=>w.name==='shield');if(shield)shield.traverse(m=>{if(m.isMesh)meshes.push(m);});
   for(let combo=0;combo<4;combo++)for(let i=0;i<=240;i++){
    at(ref,u,combo,i/240);const w=ref.weaponAttachments[0],a=w.localToWorld(new THREE.Vector3(0,.105,0)),b=w.localToWorld(new THREE.Vector3(0,.57,0)),dir=b.clone().sub(a),ray=new THREE.Raycaster(a,dir.clone().normalize(),0,dir.length());
-   assert.equal(ray.intersectObjects(meshes,false).length,0,`${frame} ${combo} ${i}: 刃が自機を貫通`);assert(b.y>=.02,`${frame} ${combo} ${i}: 剣先が床を貫通`);
+   assert.equal(ray.intersectObjects(meshes,false).length,0,`${frame} ${combo} ${i}: 刃が自機を貫通`);assert(b.y>=.02,`${frame} ${combo} ${i}: 剣先が床を貫通`);if(frame==='panzer')for(const leg of ref.feet)assert(new THREE.Box3().setFromObject(leg).min.y>=.02,'履帯を床の上に残す');
   }
  }
 });
