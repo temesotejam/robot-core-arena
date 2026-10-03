@@ -77,7 +77,7 @@ let browser;
    // Only the actor, a plain floor and physical shadow remain in the video.
    for(const o of [...r.world.children])if(o!==ref.root)r.world.remove(o);
    const floor=new THREE.Mesh(new THREE.PlaneGeometry(20,20),new THREE.MeshStandardMaterial({color:'#15212c',metalness:.05,roughness:.9}));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;r.world.add(floor);
-   r.effects.visible=false;r.scene.fog=null;r.camera.fov=32;r.camera.updateProjectionMatrix();
+   r.effects.visible=false;r.scene.fog=null;r.camera.fov=35;r.camera.updateProjectionMatrix();
    for(const light of r.scene.children)if(light.isDirectionalLight&&light.castShadow){light.shadow.camera.left=-2;light.shadow.camera.right=2;light.shadow.camera.top=2;light.shadow.camera.bottom=-2;light.shadow.camera.updateProjectionMatrix();}
    document.querySelectorAll('body > div').forEach(o=>o.style.display='none');
    let maxReplayError=0,croppedFrames=0;
