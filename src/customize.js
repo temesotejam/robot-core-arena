@@ -1,6 +1,8 @@
 import {CATALOG,WEAPONS,FRAMES,PARTS,PASSIVES,SPECIALS} from './data.js';
 import {pack,validateGrid} from './grid.js';
 export const clone=value=>structuredClone(value);
+// Apply the same ranged balance to basic weapons and previously saved loot.
+export function weaponAttack(item){const w=WEAPONS[item?.kind]||WEAPONS.sword;return (item?.at||w.at)*(w.ranged?.6:1);}
 export function itemLookup(inventory=[]){const loot=new Map(inventory.map(e=>[e.item.id,e.item]));return id=>CATALOG[id]||loot.get(id);}
 export function defaultConfig(index=0,enemy=false){
  const frame=enemy?['knight','strider','panzer'][index%3]:['knight','strider','wild'][index%3];const a=enemy?['sword','assault','missile'][index%3]:['sword','dualSword','lance'][index%3],b=enemy?['pistol','dagger','hammer'][index%3]:['pistol','machinegun','sniper'][index%3];
@@ -18,7 +20,7 @@ export function aggregate(config,getItem,activeSet=0){
  const weight=armorWeight+(item?.weight||0)+(shield?getItem(set.shield).weight:0),legs=FRAMES[getItem(config.armor.legs)?.frame]||FRAMES.knight;
  const factor=Math.max(.55,1-.4*Math.max(0,weight/legs.limit-1));const passives=new Set(config.passives);
  const cpuApplies=cpu&&(cpu.scope==='all'||cpu.scope===w.id||cpu.scope==='ranged'&&w.ranged||cpu.scope==='melee'&&!w.ranged);
- const at=(item?.at||w.at)*(1+(cpuApplies?cpu.bonus:0))*(1+(aux.at||0));
+ const at=weaponAttack(item)*(1+(cpuApplies?cpu.bonus:0))*(1+(aux.at||0));
  const jumps=legs.jumps-(w.heavy&&!['brawler','panzer'].includes(getItem(config.armor.legs)?.frame)?1:0);
  return {lp:Math.round(lp*(1+(aux.lp||0))),df:df*(1+(aux.df||0)),weight,armorWeight,output:output*(1+(aux.c||0)),burn:burn*Math.max(0,1-(aux.burn||0)),capacity:capacity*(1+(aux.bp||0)),aux,resists,at,item,weapon:w,shield,legs,frame:getItem(config.armor.legs)?.frame||'knight',move:legs.move*factor,dash:legs.dash*factor,airDash:legs.airDash*factor,jump:legs.jump*factor,jumps,airDashes:legs.airDashes,weightFactor:factor,crit:Math.min(1,w.crit*(passives.has('critical')?2:1)),regen:25*(1+(aux.regen||0)),regenDelay:passives.has('tension')?.4:.8,attackCut,memory,passives};
 }
