@@ -22,6 +22,7 @@ jobs:
       - run: npm test
       - run: npm install --no-save --package-lock=false playwright@1.63.0
       - run: npx playwright install --with-deps chromium
+      - run: node scripts/browser-smoke.cjs
       - run: node scripts/freeze-browser.cjs
       - run: node scripts/stagger-browser.cjs
       - run: node scripts/approach-browser.cjs
@@ -31,7 +32,6 @@ jobs:
         with:
           name: charge-screenshots
           path: charge-artifacts
-      - run: node scripts/browser-smoke.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
