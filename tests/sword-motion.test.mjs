@@ -17,7 +17,7 @@ function at(ref,u,combo,p,extra={}){u.attack={weapon:'sword',combo,elapsed:p,dur
 test('ソードは肩・肘・前腕から手の位置を作り、関節の長さと中間キーの速度を保つ',()=>{
  const {ref,u}=rig();
  for(let combo=0;combo<4;combo++)for(let i=0;i<=240;i++){
-  at(ref,u,combo,i/240);const f=sampleMotion('sword',u.attack);
+  at(ref,u,combo,i/240);const f=sampleMotion('sword',u.attack,{hasShield:ref.hasShield});
   for(const [side,arm]of [['right',ref.arms[0]],['left',ref.arms[1]]]){
    const fk=swordArm(f.joints[side]);assert(arm.hand.position.distanceTo(fk.wrist)<1e-9);
    assert(Math.abs(arm.elbow.position.length()-.195)<1e-9);assert(Math.abs(arm.hand.position.distanceTo(arm.elbow.position)-.195)<1e-9);
@@ -55,7 +55,7 @@ test('通常ソードの刃の中心線は全5フレームで胴・頭・盾を�
   for(let combo=0;combo<4;combo++){Object.assign(u,{combo,comboWindow:1,comboHit:queued,active:0,comboChain:{weapon:'sword',set:0,hits:new Map()}});for(let i=0;i<=240;i++){
    at(ref,u,combo,i/240,{blendFrom:from});const w=ref.weaponAttachments[0],a=w.localToWorld(new THREE.Vector3(0,.105,0)),b=w.localToWorld(new THREE.Vector3(0,.57,0)),dir=b.clone().sub(a),ray=new THREE.Raycaster(a,dir.clone().normalize(),0,dir.length());
    assert.equal(ray.intersectObjects(meshes,false).length,0,`${frame} ${combo} ${i}: 刃が自機を貫通`);assert(b.y>=.02,`${frame} ${combo} ${i}: 剣先が床を貫通`);if(frame==='panzer')for(const leg of ref.feet)assert(new THREE.Box3().setFromObject(leg).min.y>=.02,'履帯を床の上に残す');
-  }if(queued)from=sampleMotion('sword',{combo,elapsed:1,duration:1,blendFrom:from},{nextCombo:(combo+1)%4});}
+  }if(queued)from=sampleMotion('sword',{combo,elapsed:1,duration:1,blendFrom:from},{nextCombo:(combo+1)%4,hasShield:ref.hasShield});}
   }
  }
 });

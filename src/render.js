@@ -4,6 +4,7 @@ import {KNOCKDOWN,nextCombo} from './combat.js';
 import {sampleMotion,readyPose,motionRhythm,stepPhase} from './motion.js';
 import {swordArm} from './sword-motion.js';
 import {sampleLocomotion} from './locomotion.js';
+import {sampleLanding} from './landing-motion.js';
 const mats=new Map(),boxes=new Map(),armorGeometries=new Map(),plateGeometries=new Map();
 // Cached meshes share resources across robots. Release only scene-owned GPU
 // resources, once each, when a weapon or a complete scene is replaced.
@@ -134,14 +135,18 @@ function recoveryPose(ref,u){
  for(const trail of ref.weaponTrails||[])trail.samples=[];
 }
 // Both the hangar and battle use these poses; attachments never need to cancel a shoulder rotation.
-function poseWeapons(ref,u=null,time=0,locomotion=null){
- const w=WEAPONS[ref.kind],speed=u?Math.hypot(u.vx,u.vz):0,attack=u?.attack||(u?.motion?.weapon===w.id&&!w.ranged&&(!u.charging||u.motion.elapsed<u.motion.duration)?u.motion:null),motion=sampleMotion(w.id,attack,{nextCombo:u?.queuedAttack?nextCombo(u,u.queuedAttack.charge,w):null,charging:u?.charging?u.chargePose:null}),dual=['dualSword','dualGun','knuckle'].includes(w.id);
+function poseWeapons(ref,u=null,time=0,locomotion=null,landing=null){
+ const w=WEAPONS[ref.kind],speed=u?Math.hypot(u.vx,u.vz):0,attack=u?.attack||(u?.motion?.weapon===w.id&&!w.ranged&&(!u.charging||u.motion.elapsed<u.motion.duration)?u.motion:null),motion=sampleMotion(w.id,attack,{nextCombo:u?.queuedAttack?nextCombo(u,u.queuedAttack.charge,w):null,charging:u?.charging?u.chargePose:null,hasShield:!!ref.hasShield}),dual=['dualSword','dualGun','knuckle'].includes(w.id);
  const shot=u?.motion?.weapon===w.id&&w.ranged?u.motion:null,shotProgress=shot?THREE.MathUtils.clamp(shot.elapsed/shot.duration,0,1):0;
  const kick=kind=>({machinegun:.012,assault:.015,dualGun:.020,pistol:.028,shotgun:.035,rifle:.038,sniper:.050,heavyShotgun:.045,bazooka:.052,missile:.030})[kind]||.022;
  const pulse=p=>{if(p<=0||p>=1)return 0;const t=p<.24?p/.24:1-(p-.24)/.76;return t*t*(3-2*t);},recoil=shot?pulse(shotProgress)*kick(w.id):0;
  for(const weapon of ref.weaponAttachments)if(weapon.userData.flash)weapon.userData.flash.visible=!!shot&&shotProgress<.3&&!u.dead&&!u.guard;
  for(const [i,arm]of ref.arms.entries()){
-  if(motion.joints&&!u?.guard&&(!u?.charging||attack||motion.name==='chargeHold')&&!u?.dead&&!(u?.down>0)){poseSwordArm(arm,walkingJoint(motion.joints[i?'left':'right'],!attack&&!u?.charging?locomotion?.arms?.[i]:null));continue;}
+  if(motion.joints&&!u?.guard&&(!u?.charging||attack||motion.name==='chargeHold')&&!u?.dead&&!(u?.down>0)){
+   let joint=walkingJoint(motion.joints[i?'left':'right'],!attack&&!u?.charging?locomotion?.arms?.[i]:null);
+   if(i===1&&ref.hasShield&&landing?.guard)joint=walkingJoint(joint,{rotation:[-.24*landing.guard,-.08*landing.guard,-.06*landing.guard],bend:.20*landing.guard,clavicle:[0,0,0]});
+   poseSwordArm(arm,joint);continue;
+  }
   const side=arm.userData.side,armed=i===0||dual,p=armed&&!w.ranged?(i?motion.left:motion.right):readyPose(w.id,side),target=new THREE.Vector3(...p.position),rotation=new THREE.Euler(...p.rotation);
   if(armed&&w.ranged){const handRecoil=w.id==='dualGun'&&i===1?pulse((shotProgress-.12)/.88)*kick(w.id):recoil;target.z-=handRecoil;target.y+=handRecoil*.22;rotation.x=-handRecoil*(['pistol','shotgun','dualGun'].includes(w.id)?3.2:1.4);}
   if(!attack&&!w.ranged&&locomotion&&!u?.charging&&!u?.guard){target.z+=(locomotion.armSwing||0)*(i?-1:1);target.y+=(locomotion.arms?.[i]?.clavicle[1]||0);}
@@ -231,13 +236,13 @@ export class ArenaRenderer{
  animateRobot(ref,u,time,groundAt=this.groundAt){
   ref.root.position.set(u.x,u.y,u.z);ref.root.rotation.set(0,u.yaw,0);ref.root.visible=true;ref.ring.visible=!u.dead;ref.ring.position.set(0,.015,0);ref.ring.rotation.set(-Math.PI/2,0,0);ref.root.scale.setScalar(u.dead?.65:1);
   if(ref.active!==u.active){ref.active=u.active;ref.changeWeapons(u.config.sets[u.active]);}
-  const locomotion=sampleLocomotion(ref,u,time,{groundAt}),motion=poseWeapons(ref,u,time,locomotion),canPose=!u.dead&&!(u.down>0||u.rise>0||u.knockdown),attack=u.attack||u.motion;
+  const landing=sampleLanding(ref,u,time),locomotion=sampleLocomotion(ref,u,time,{groundAt}),motion=poseWeapons(ref,u,time,locomotion,landing),canPose=!u.dead&&!(u.down>0||u.rise>0||u.knockdown),attack=u.attack||u.motion;
   // The visible cutting plane follows the same committed yaw as the hit arc.
   // Turn back toward a moving lock target smoothly during recovery.
   let facing=u.yaw;if(canPose&&motion.sword&&motion.plantYaw!==undefined){const p=attack.elapsed/attack.duration,t=THREE.MathUtils.smoothstep(p,motion.spinYaw!==undefined?.78:.53,1);facing=motion.plantYaw+Math.atan2(Math.sin(u.yaw-motion.plantYaw),Math.cos(u.yaw-motion.plantYaw))*t;}facing+=motion.spinYaw||0;ref.root.rotation.y=facing;
   const reaction=u.knockdown?null:u.hitReaction,reactionWeight=reaction?Math.sin(Math.PI*Math.min(1,reaction.elapsed/reaction.duration)):0,relative=reaction?(reaction.yaw-facing):0,approach=attack?.approach,approachWeight=canPose&&approach?THREE.MathUtils.smoothstep(approach.elapsed,0,.025)*(1-THREE.MathUtils.smoothstep(approach.elapsed,approach.duration-.03,approach.duration))*Math.min(1,approach.travel/.1):0;
-  ref.bodyPivot.rotation.set(u.dead?Math.PI/3:u.knockdown?0:u.down>0?.9:motion.body[0]+(locomotion?.body[0]??(u.dashTime>0?.13:0))+approachWeight*.08+Math.cos(relative)*(reaction?.strength||0)*reactionWeight,canPose?motion.body[1]+(locomotion?.body[1]||0):0,u.dead?.8:u.status==='stun'?Math.sin(time*30)*.03:canPose?motion.body[2]+(locomotion?.body[2]||0)-Math.sin(relative)*(reaction?.strength||0)*reactionWeight:0);
-  const drop=canPose?motion.drop+(locomotion?.drop||0):0,shift=canPose?motion.shift.map((v,i)=>v+(locomotion?.shift[i]||0)):[0,0],tracks=motion.sword&&ref.legFrame==='panzer';ref.bodyPivot.position.set(shift[0],.36+drop,shift[1]);ref.legGroup.position.set(tracks?0:shift[0]*.5,tracks?0:drop,tracks?0:shift[1]*.6);const hipYaw=canPose&&ref.legFrame!=='panzer'?(locomotion?.hipYaw??motion.hipYaw):0;ref.legGroup.rotation.y=hipYaw;
+  ref.bodyPivot.rotation.set(u.dead?Math.PI/3:u.knockdown?0:u.down>0?.9:motion.body[0]+(locomotion?.body[0]??(u.dashTime>0?.13:0))+(landing?.body[0]||0)+approachWeight*.08+Math.cos(relative)*(reaction?.strength||0)*reactionWeight,canPose?motion.body[1]+(locomotion?.body[1]||0):0,u.dead?.8:u.status==='stun'?Math.sin(time*30)*.03:canPose?motion.body[2]+(locomotion?.body[2]||0)+(landing?.body[2]||0)-Math.sin(relative)*(reaction?.strength||0)*reactionWeight:0);
+  const drop=canPose?motion.drop+(locomotion?.drop||0)+(landing?.drop||0):0,shift=canPose?motion.shift.map((v,i)=>v+(locomotion?.shift[i]||0)):[0,0],tracks=motion.sword&&ref.legFrame==='panzer';ref.bodyPivot.position.set(shift[0],.36+drop,shift[1]);ref.legGroup.position.set(tracks?0:shift[0]*.5,tracks?0:drop,tracks?0:shift[1]*.6);const hipYaw=canPose&&ref.legFrame!=='panzer'?(locomotion?.hipYaw??motion.hipYaw):0;ref.legGroup.rotation.y=hipYaw;
   const footTargets=ref.feet.map((leg,i)=>{
    const foot=new THREE.Vector3(...motion.feet[i]);
    if(canPose&&u.grounded&&motion.plantOrigin&&!u.guard){
@@ -264,7 +269,7 @@ export class ArenaRenderer{
   }
   for(const [i,leg]of ref.feet.entries())if(leg.knee){const foot=footTargets[i].clone().sub(ref.legGroup.position).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw);poseLeg(leg,foot);leg.foot.rotation.set(locomotion?.pitch[i]||0,(locomotion?.footYaw[i]??motion.footYaw[i]??0)-hipYaw+(canPose&&u.grounded&&motion.plantOrigin&&!u.guard?(motion.plantYaw??facing)-facing:0),locomotion?.roll[i]||0);}
   const head=motion.head||[-motion.body[0]*(motion.sword?.65:.20),-motion.body[1]*(motion.sword?.75:.28),0];
-  ref.head.rotation.set(canPose?head[0]-(locomotion?.body[0]||0)*.65:0,canPose?head[1]-(locomotion?.body[1]||0)*.9:0,canPose?head[2]-(locomotion?.body[2]||0)*.7:0);recoveryPose(ref,u);ref.ring.material.opacity=u.buffTime>0?.85:.45;updateTrails(ref,u,time,motion.name);
+  ref.head.rotation.set(canPose?head[0]-(locomotion?.body[0]||0)*.65+(landing?.head[0]||0):0,canPose?head[1]-(locomotion?.body[1]||0)*.9:0,canPose?head[2]-(locomotion?.body[2]||0)*.7+(landing?.head[2]||0):0);recoveryPose(ref,u);ref.ring.material.opacity=u.buffTime>0?.85:.45;updateTrails(ref,u,time,motion.name);
   // Start the first step from the weapon's actual idle stance, rather than
   // snapping its support foot into the locomotion module's neutral stance.
   if(ref.locomotion.mode==='idle'&&!ref.locomotion.started)for(const [i,leg]of ref.feet.entries())if(leg.foot){const f=ref.locomotion.feet[i],direction=new THREE.Vector3(0,0,1).applyQuaternion(leg.foot.getWorldQuaternion(new THREE.Quaternion()));f.world=leg.foot.getWorldPosition(new THREE.Vector3()).toArray();f.from=[...f.world];f.yaw=Math.atan2(direction.x,direction.z);f.fromYaw=f.yaw;}

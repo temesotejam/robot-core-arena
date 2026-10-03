@@ -55,15 +55,15 @@ test('全身を使って前後・横・斜めに歩いてもソードの刃は�
 });
 
 test('歩行の腕振りはソードの握りと共有の構えを変えず、攻撃とチャージ姿勢に混ざらない',()=>{
- const ready=sampleMotion('sword',null),saved=JSON.stringify(ready),wrists=['right','left'].map(side=>new THREE.Quaternion().fromArray(ready.joints[side].wrist));
+ const ready=sampleMotion('sword',null,{hasShield:true}),saved=JSON.stringify(ready),wrists=['right','left'].map(side=>new THREE.Quaternion().fromArray(ready.joints[side].wrist));
  for(const frame of frames){
   const {b,u,ref,draw}=fixture(frame);draw();
   for(let i=0;i<90;i++){b.tick(1/60,{x:0,z:1});draw();for(const [j,arm]of ref.arms.entries()){const wrist=arm.lower.quaternion.clone().invert().multiply(arm.hand.quaternion);assert(wrist.angleTo(wrists[j])<1e-7,'arm swing must preserve the authored wrist grip');}}
-  assert.equal(JSON.stringify(sampleMotion('sword',null)),saved,'walking must not mutate a shared ready pose');
+  assert.equal(JSON.stringify(sampleMotion('sword',null,{hasShield:true})),saved,'walking must not mutate a shared ready pose');
   for(const state of ['attack','charge']){
    Object.assign(u,{attack:state==='attack'?{weapon:'sword',combo:1,elapsed:.4,duration:1}:null,motion:null,charging:state==='charge',chargePose:state==='charge'?{amount:.65,elapsed:.52}:null});draw();
    const fresh=createRobot(u.config,id=>CATALOG[id]);fresh.active=0;draw(fresh);assert.equal(pose(ref),pose(fresh),`${state}: authored body and arms cannot depend on previous walking`);
   }
  }
- assert.equal(JSON.stringify(sampleMotion('sword',null)),saved);
+ assert.equal(JSON.stringify(sampleMotion('sword',null,{hasShield:true})),saved);
 });

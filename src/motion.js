@@ -112,8 +112,8 @@ function frames(kind,name){
  return {prepare,strike,follow,control:c.control,leftControl:c.leftControl};
 }
 function clipName(kind,attack){return attack.skill==='tech'&&['naginata','scythe'].includes(kind)?'spin':attack.charge>.5&&!['rapier','lance','knuckle'].includes(kind)?['hammer','naginata','scythe'].includes(kind)?'hammerSlam':'overhead':comboClip(kind,attack.combo||0);}
-export function sampleMotion(kind,attack,{nextCombo=null,charging=null}={}){
- if(kind==='sword'&&(!attack||!attack.skill)){if(!attack&&charging)return swordChargeHold(charging);return swordMotion(attack,{nextCombo});}
+export function sampleMotion(kind,attack,{nextCombo=null,charging=null,hasShield=attack?.blendFrom?.hasShield??charging?.from?.hasShield??false}={}){
+ if(kind==='sword'&&(!attack||!attack.skill)){if(!attack&&charging)return swordChargeHold({...charging,hasShield});return swordMotion(attack,{nextCombo,hasShield});}
  const base=readyFrame(kind);if(!attack||!COMBO_CLIPS[kind])return {name:'ready',...base};
  const name=clipName(kind,attack),c=frames(kind,name),r=motionRhythm(kind,attack),p=clamp(attack.elapsed/attack.duration),start=attack.blendFrom||base;
  let out;

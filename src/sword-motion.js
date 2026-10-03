@@ -50,6 +50,17 @@ export function blendSword(a,b,t){
  return finish({sword:true,joints:{right,left:blendJoint(a.joints.left,b.joints.left,t)},bladeJoint:right,bladeBody:vec(a.bladeBody||a.body,b.bladeBody||b.body,t),bladePivot:vec(a.bladePivot||[a.shift[0],a.drop,a.shift[1]],b.bladePivot||[b.shift[0],b.drop,b.shift[1]],t),body:vec(a.body,b.body,t),head:vec(a.head,b.head,t),hipYaw:lerp(a.hipYaw,b.hipYaw,t),drop:lerp(a.drop,b.drop,t),shift:vec(a.shift,b.shift,t),footYaw:vec(a.footYaw,b.footYaw,t),feet:a.feet.map((v,i)=>vec(v,b.feet[i],t)),weight:lerp(a.weight,b.weight,t)});
 }
 const ready=pose();
+// Shield poses stay between the chest and the opponent. They are authored in
+// the committed facing frame, then expressed at the shoulder relative to the
+// turning chest. The wrist keeps one grip; it does not flip to aim the shield.
+const shieldGuard=[-.37,.06,-.10,1.21,.02,.04,.02],shieldCover=[-.52,-.12,-.20,1.09,.02,.04,.02],shieldBrace=[-.66,.18,-.12,.96,.01,.04,.02],shieldDeflect=[-1.45,-.25,.05,.48,-.05,.04,.02],shieldGather=[-.24,.05,.38,1.35,.04,.04,.02];
+function equipped(f,hasShield,left=null){
+ if(!hasShield)return {...f,hasShield:false};
+ const j=joint(left||shieldGuard,1),chest=new THREE.Quaternion().fromArray(quat(f.body));
+ j.upper=chest.invert().multiply(new THREE.Quaternion().fromArray(j.upper)).normalize().toArray();
+ return finish({...f,hasShield:true,joints:{...f.joints,left:j}});
+}
+const shieldReady=equipped(ready,true);
 // Each row is a complete pose, not a shared wrist path with a different sign.
 // The pelvis starts opening before the chest. The cutting arm extends during
 // acceleration; the elbow bends again only after the blade passes the target.
@@ -102,20 +113,28 @@ const expression=[
  {body:[[-.040,0,.008],[-.045,0,.008],[.038,0,0],[.060,0,-.008],[.056,0,-.008],[.025,0,0]],drop:[-.054,-.061,-.071,-.079,-.074,-.054],shift:[[0,-.010],[.005,-.010],[0,.017],[0,.037],[0,.035],[0,.021]],hips:[-.16,-.02,.16,.24,.25,.18],left:[counterGuard,[-.48,.12,.31,1.14,.08,.04,.02],counterGather,[-.03,-.20,.36,1.23,-.08,.04,.02],[.20,-.24,.34,1.16,-.12,.04,.02],counterGather],weight:[.45,.72,1,1,.72,.36]},
 ];
 for(let stage=0;stage<4;stage++)cuts[stage]=cuts[stage].map(([time,f],i)=>[time,express(f,expression[stage].body[i],expression[stage].hips[i],expression[stage].left[i],expression[stage].weight[i],{drop:expression[stage].drop[i],shift:expression[stage].shift[i]})]);
+const shieldSequence=[
+ [shieldGuard,shieldCover,shieldBrace,shieldDeflect,shieldDeflect,shieldDeflect],
+ [shieldGather,shieldDeflect,shieldDeflect,shieldBrace,shieldGather,shieldGuard],
+ [shieldCover,shieldBrace,shieldGuard,shieldDeflect,shieldGather,shieldGuard],
+ [shieldCover,shieldBrace,shieldGuard,shieldDeflect,shieldGather,shieldGuard],
+];
+const shieldCuts=cuts.map((row,stage)=>row.map(([time,f],i)=>[time,equipped(f,true,shieldSequence[stage][i])]));
 // Gather above the belt instead of drawing a downward-pointing blade through
 // the waist on the way back to guard. The same raised elbow route is used to
 // prepare an isolated return cut; connected combos already start wound up.
 const beltClear=express(pose([.05,.22,.90,1.05,-.12,.025,-.025],[.04,.27,-.008],.13,-.032,[-.003,.008],counterPull),[.010,0,0],.13,counterPull,.28,{drop:-.044});
 const returnClear=finish({...beltClear,joints:{...beltClear.joints,left:blendJoint(ready.joints.left,beltClear.joints.left,.70)}});
+const shieldBeltClear=equipped(beltClear,true,shieldDeflect),shieldReturnClear=finish({...shieldBeltClear,joints:{...shieldBeltClear.joints,left:blendJoint(shieldReady.joints.left,shieldBeltClear.joints.left,.70)}});
 // The sweep keeps one horizontal blade plane. Rotation comes from the hips
 // and a full body turn, rather than rolling the wrist during the cut.
 const sweepArm=[.24759206,.01861577,-.43186010,1.83193764,-1.98144829,.025,0];
 const sweepLeft=[-.18,.10,.21,1.48,.02,.04,.02];
 const chargeLow=express(pose(sweepArm,[.025,-.25,.01],-.15,-.040,[.004,-.012],sweepLeft),[-.018,-.025,.010],-.19,counterGuard,.45,{drop:-.060});
 const chargeHigh=express(pose(sweepArm,[.025,-.65,.01],-.28,-.065,[.008,-.020],sweepLeft,[-.12,.06]),[-.022,-.045,.012],-.36,counterGuard,.80,{drop:-.085});
-export function swordChargeHold({amount=0,elapsed=0,from=null}={}){
- const loaded=blendSword(chargeLow,chargeHigh,ease(amount)),out=blendSword(from?.joints?from:ready,loaded,ease((elapsed-.10)/.22));
- return {...out,name:'chargeHold',chargeAmount:clamp(amount)};
+export function swordChargeHold({amount=0,elapsed=0,from=null,hasShield=from?.hasShield??false}={}){
+ const low=equipped(chargeLow,hasShield,shieldGuard),high=equipped(chargeHigh,hasShield,shieldCover),loaded=blendSword(low,high,ease(amount)),out=blendSword(from?.joints?from:hasShield?shieldReady:ready,loaded,ease((elapsed-.10)/.22));
+ return {...out,name:'chargeHold',chargeAmount:clamp(amount),hasShield};
 }
 export function swordSpinTurn(p){return ease((p-.20)/.58);}
 // The blade is offset from the center of the body. Calibrate its angular
@@ -134,12 +153,12 @@ function spinFeet(out,attack){
  });
  return {...out,feet,footYaw,footStride:[1,1],spinYaw:turn*Math.PI*2};
 }
-function swordChargedCut(attack,nextCombo){
- const amount=clamp(attack.charge),p=clamp(attack.elapsed/attack.duration),start=attack.blendFrom?.joints?attack.blendFrom:swordChargeHold({amount,elapsed:.32}),destination=nextCombo===null?ready:cuts[nextCombo%4][0][1];
- const open=express(pose(sweepArm,[.025,0,0],.05,-.055,[0,0],sweepLeft),[.045,0,-.012],.13,counterPull,1,{drop:-.074}),out=track([
-  [0,start],[.10,blendSword(start,chargeHigh,.18*amount)],
+function swordChargedCut(attack,nextCombo,hasShield){
+ const amount=clamp(attack.charge),p=clamp(attack.elapsed/attack.duration),row=hasShield?shieldCuts:cuts,start=attack.blendFrom?.joints?attack.blendFrom:swordChargeHold({amount,elapsed:.32,hasShield}),destination=nextCombo===null?(hasShield?shieldReady:ready):row[nextCombo%4][0][1];
+ const open=equipped(express(pose(sweepArm,[.025,0,0],.05,-.055,[0,0],sweepLeft),[.045,0,-.012],.13,counterPull,1,{drop:-.074}),hasShield,shieldBrace),out=track([
+  [0,start],[.10,blendSword(start,equipped(chargeHigh,hasShield,shieldCover),.18*amount)],
   [.20,open],[.50,open],[.78,open],
-  [.87,express(pose(sweepArm,[.025,.18,.01],.08,-.042,[0,0],sweepLeft),[.025,.020,-.004],.12,counterGather,.38,{drop:-.060})],
+  [.87,equipped(express(pose(sweepArm,[.025,.18,.01],.08,-.042,[0,0],sweepLeft),[.025,.020,-.004],.12,counterGather,.38,{drop:-.060}),hasShield,shieldGather)],
   [1,destination],
  ],p),planted=plantSword(out,attack,'chargeSweep');
  if(p<.20)return {...planted,spinYaw:0};
@@ -167,15 +186,38 @@ function track(keys,p){
  }
  // Continuous tangents across authored keys avoid a stop at every intermediate
  // pose. Endpoint tangents settle; grip and blade remain attached throughout.
- return finish({sword:true,joints,bladeJoint:joints.right,bladeBody:vector(f=>f.bladeBody||f.body),bladePivot:vector(f=>f.bladePivot||[f.shift[0],f.drop,f.shift[1]]),body:vector(f=>f.body),head:vector(f=>f.head),hipYaw:scalar(f=>f.hipYaw),drop:scalar(f=>f.drop),shift:vector(f=>f.shift),footYaw:vector(f=>f.footYaw),feet:BASE_FEET.map(v=>[...v]),weight:scalar(f=>f.weight)});
+ return finish({sword:true,hasShield:!!frames[1].hasShield,joints,bladeJoint:joints.right,bladeBody:vector(f=>f.bladeBody||f.body),bladePivot:vector(f=>f.bladePivot||[f.shift[0],f.drop,f.shift[1]]),body:vector(f=>f.body),head:vector(f=>f.head),hipYaw:scalar(f=>f.hipYaw),drop:scalar(f=>f.drop),shift:vector(f=>f.shift),footYaw:vector(f=>f.footYaw),feet:BASE_FEET.map(v=>[...v]),weight:scalar(f=>f.weight)});
 }
-export function swordMotion(attack,{nextCombo=null}={}){
- if(!attack)return {name:'ready',...ready};
- if(attack.charge>0)return swordChargedCut(attack,nextCombo);
- const stage=((attack.combo||0)%4+4)%4,p=clamp(attack.elapsed/attack.duration),start=attack.blendFrom?.joints?attack.blendFrom:ready;
+// Deliberate settling after blade passage, followed by a quicker gathering
+// into the next cut. Contact phases are an exact identity mapping so that
+// existing blade direction and actual combat hits remain synchronized.
+const timing=[
+ {before:[[0,0],[.08,.11],[.16,.16],[.27,.27]],after:[[.45,.45],[.53,.53],[.65,.565],[.78,.78],[1,1]]},
+ // The isolated return cut already takes a short raised-elbow route. Keep
+ // its preparation clock unchanged rather than accelerating that turn again.
+ {before:[[0,0],[.08,.08],[.16,.16],[.27,.27]],after:[[.45,.45],[.53,.53],[.61,.565],[.74,.72],[1,1]]},
+ {before:[[0,0],[.08,.065],[.16,.16],[.27,.27]],after:[[.45,.45],[.53,.53],[.67,.575],[.82,.80],[1,1]]},
+ {before:[[0,0],[.10,.085],[.16,.16],[.30,.30]],after:[[.47,.47],[.53,.53],[.65,.575],[.80,.76],[1,1]]},
+];
+function timeCurve(keys,p,firstSlope,lastSlope){
+ let i=1;while(p>keys[i][0]&&i<keys.length-1)i++;
+ const slopes=keys.slice(1).map((k,n)=>(k[1]-keys[n][1])/(k[0]-keys[n][0]));
+ const tangent=n=>n===0?firstSlope:n===keys.length-1?lastSlope:2/(1/slopes[n-1]+1/slopes[n]);
+ const [x0,y0]=keys[i-1],[x1,y1]=keys[i],span=x1-x0,t=clamp((p-x0)/span),t2=t*t,t3=t2*t;
+ return (2*t3-3*t2+1)*y0+(t3-2*t2+t)*span*tangent(i-1)+(-2*t3+3*t2)*y1+(t3-t2)*span*tangent(i);
+}
+export function swordVisualPhase(attack){
+ const p=clamp(attack.elapsed/attack.duration);if(attack.charge>0)return p;
+ const stage=((attack.combo||0)%4+4)%4,clock=timing[stage],start=clock.before.at(-1)[0],end=clock.after[0][0];
+ return p<start?timeCurve(clock.before,p,1,1):p>end?timeCurve(clock.after,p,1,1):p;
+}
+export function swordMotion(attack,{nextCombo=null,hasShield=attack?.blendFrom?.hasShield??false}={}){
+ if(!attack)return {name:'ready',...equipped(ready,hasShield)};
+ if(attack.charge>0)return {...swordChargedCut(attack,nextCombo,hasShield),hasShield};
+ const stage=((attack.combo||0)%4+4)%4,p=swordVisualPhase(attack),row=hasShield?shieldCuts:cuts,start=attack.blendFrom?.joints?attack.blendFrom:hasShield?shieldReady:ready;
  // Queued cuts keep the winding posture; no excursion through the idle guard.
- const destination=nextCombo===null?ready:cuts[(nextCombo+4)%4][0][1];
- const keys=[[0,start],...(stage===1&&!attack.blendFrom?.joints?[[.055,returnClear]]:[]),...cuts[stage].filter(([time])=>!attack.blendFrom?.joints||time!==.10),...(stage===0?[[.78,beltClear]]:[]),[1,destination]];let out=track(keys,p);
+ const destination=nextCombo===null?(hasShield?shieldReady:ready):row[(nextCombo+4)%4][0][1];
+ const keys=[[0,start],...(stage===1&&!attack.blendFrom?.joints?[[.055,hasShield?shieldReturnClear:returnClear]]:[]),...row[stage].filter(([time])=>!attack.blendFrom?.joints||time!==.10),...(stage===0?[[.78,hasShield?shieldBeltClear:beltClear]]:[]),[1,destination]];let out=track(keys,p);
  if(stage===3){
   // After the downward contact, gather the elbow before recovering the sword.
   // Equal shoulder-pitch and elbow-flex changes retain the forearm and blade
@@ -183,7 +225,7 @@ export function swordMotion(attack,{nextCombo=null}={}){
   const gather=.48*ease((p-.45)/.065)*(1-ease((p-.67)/.20));
   if(gather>0){const j=out.bladeJoint||out.joints.right,raised={...j,upper:new THREE.Quaternion().fromArray(j.upper).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),gather)).normalize().toArray(),bend:j.bend+gather};out=finish({...out,bladeJoint:raised,bladeBody:out.bladeBody||out.body,joints:{...out.joints,right:raised}});}
  }
- return plantSword(out,attack,names[stage]);
+ return {...plantSword(out,attack,names[stage]),hasShield,visualPhase:p};
 }
 function plantSword(out,attack,name){
  const p=clamp(attack.elapsed/attack.duration);

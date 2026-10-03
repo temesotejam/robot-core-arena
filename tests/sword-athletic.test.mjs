@@ -39,7 +39,7 @@ test('ソードの低い荷重・受け止め・回収は腰装甲と脚・履�
     assert.equal(bladeHits(ref,meshes).length,0,`${frame}/${queued}/${combo}/${p}: 刃が腰・脚・胴・盾を貫通`);
     for(const leg of ref.feet)assert(new THREE.Box3().setFromObject(leg.foot||leg).min.y>=0,`${frame}/${combo}/${p}: 足が床を貫通`);
    }
-   if(queued)from=sampleMotion('sword',{combo,elapsed:1,duration:1,blendFrom:from},{nextCombo:next});
+   if(queued)from=sampleMotion('sword',{combo,elapsed:1,duration:1,blendFrom:from},{nextCombo:next,hasShield:ref.hasShield});
   }
   u.queuedAttack=null;
   for(const amount of [.2,.5,1])for(let i=0;i<=240;i++){
@@ -54,7 +54,7 @@ test('各段の着地姿勢を変えても支持足を固定し、回収の踏�
   const {ref,u}=fixture(frame),anchors=[null,null];let recoveryLift=false,low=Infinity,high=-Infinity;
   for(let i=0;i<=480;i++){
    const p=i/480;u.attack={id:`${frame}-${combo}`,weapon:'sword',combo,elapsed:p,duration:1,origin:[0,0,0],yaw};const travel=.24*stepPhase(u.attack);u.x=Math.sin(yaw)*travel;u.z=Math.cos(yaw)*travel;u.yaw=yaw+.13*Math.sin(p*4);draw(ref,u,p);
-   const f=sampleMotion('sword',u.attack),points=feet(ref);let contacts=0;
+   const f=sampleMotion('sword',u.attack,{hasShield:ref.hasShield}),points=feet(ref);let contacts=0;
    for(let j=0;j<2;j++){
     if(f.feet[j][1]>.035+1e-9){anchors[j]=null;if(p>.74&&p<.94&&j===1)recoveryLift=true;}
     else {contacts++;anchors[j]??=points[j].clone();assert(points[j].distanceTo(anchors[j])<1e-7,`${frame}/${combo}/${p}/${j}: 支持足が滑る`);}
@@ -72,8 +72,8 @@ test('実際の先行入力で次段が始まる瞬間も接地位置と全身�
   const {config,ref}=fixture(frame),b=new Battle({allies:[config],enemies:[defaultConfig()],setup:{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true},getItem:id=>CATALOG[id],rng:()=>.99});b.countdown=0;b.training.freezeAI=true;b.training.infinite=true;
   const u=b.human,v=b.entities[1];Object.assign(u,{x:0,z:0,yaw:0,target:v.id});Object.assign(v,{x:0,z:.9,lp:100000});let boundaries=0;
   const attack=b.attack.bind(b);b.attack=(unit,...args)=>{
-   draw(ref,unit,b.time);const old=unit.motion&&sampleMotion('sword',unit.motion,{nextCombo:unit.queuedAttack?(unit.combo+1)%4:null}),before=feet(ref),root=ref.root.position.clone();
-   const ok=attack(unit,...args);if(ok&&old){draw(ref,unit,b.time);const after=feet(ref);assert(ref.root.position.distanceTo(root)<1e-9);for(let j=0;j<2;j++)assert(after[j].distanceTo(before[j])<1e-7,`${frame}/${unit.combo}/${j}: 次段の開始で足が飛ぶ`);const f=sampleMotion('sword',unit.attack);for(const key of ['head','body','hipYaw','drop','shift','joints','bladePivot'])assert.deepEqual(f[key],old[key],`${frame}/${unit.combo}: ${key} が飛ぶ`);boundaries++;}return ok;
+   draw(ref,unit,b.time);const old=unit.motion&&sampleMotion('sword',unit.motion,{nextCombo:unit.queuedAttack?(unit.combo+1)%4:null,hasShield:ref.hasShield}),before=feet(ref),root=ref.root.position.clone();
+   const ok=attack(unit,...args);if(ok&&old){draw(ref,unit,b.time);const after=feet(ref);assert(ref.root.position.distanceTo(root)<1e-9);for(let j=0;j<2;j++)assert(after[j].distanceTo(before[j])<1e-7,`${frame}/${unit.combo}/${j}: 次段の開始で足が飛ぶ`);const f=sampleMotion('sword',unit.attack,{hasShield:ref.hasShield});for(const key of ['head','body','hipYaw','drop','shift','joints','bladePivot'])assert.deepEqual(f[key],old[key],`${frame}/${unit.combo}: ${key} が飛ぶ`);boundaries++;}return ok;
   };
   const tick=input=>{b.tick(1/120,input);draw(ref,u,b.time);},tap=()=>{tick({attack:true});tick({attack:false});};tap();
   for(const stage of [1,2,3]){
