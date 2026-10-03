@@ -174,8 +174,8 @@ export class ArenaRenderer{
   // The visible cutting plane follows the same committed yaw as the hit arc.
   // Turn back toward a moving lock target smoothly during recovery.
   let facing=u.yaw;if(canPose&&motion.sword&&motion.plantYaw!==undefined){const p=attack.elapsed/attack.duration,t=THREE.MathUtils.smoothstep(p,motion.spinYaw!==undefined?.78:.53,1);facing=motion.plantYaw+Math.atan2(Math.sin(u.yaw-motion.plantYaw),Math.cos(u.yaw-motion.plantYaw))*t;}facing+=motion.spinYaw||0;ref.root.rotation.y=facing;
-  const reaction=u.hitReaction,reactionWeight=reaction?Math.sin(Math.PI*Math.min(1,reaction.elapsed/reaction.duration)):0,relative=reaction?(reaction.yaw-facing):0;
-  ref.bodyPivot.rotation.set(u.dead?Math.PI/3:u.down>0?.9:motion.body[0]+(u.dashTime>0?.13:0)+Math.cos(relative)*(reaction?.strength||0)*reactionWeight,canPose?motion.body[1]:0,u.dead?.8:u.status==='stun'?Math.sin(time*30)*.03:canPose?motion.body[2]-Math.sin(relative)*(reaction?.strength||0)*reactionWeight:0);
+  const reaction=u.hitReaction,reactionWeight=reaction?Math.sin(Math.PI*Math.min(1,reaction.elapsed/reaction.duration)):0,relative=reaction?(reaction.yaw-facing):0,approach=attack?.approach,approachWeight=canPose&&approach?THREE.MathUtils.smoothstep(approach.elapsed,0,.025)*(1-THREE.MathUtils.smoothstep(approach.elapsed,approach.duration-.03,approach.duration))*Math.min(1,approach.travel/.1):0;
+  ref.bodyPivot.rotation.set(u.dead?Math.PI/3:u.down>0?.9:motion.body[0]+(u.dashTime>0?.13:0)+approachWeight*.08+Math.cos(relative)*(reaction?.strength||0)*reactionWeight,canPose?motion.body[1]:0,u.dead?.8:u.status==='stun'?Math.sin(time*30)*.03:canPose?motion.body[2]-Math.sin(relative)*(reaction?.strength||0)*reactionWeight:0);
   const drop=canPose?motion.drop:0,shift=canPose?motion.shift:[0,0];ref.bodyPivot.position.set(shift[0],.36+drop,shift[1]);ref.legGroup.position.set(shift[0]*.5,motion.sword&&ref.legFrame==='panzer'?0:drop,shift[1]*.6);const hipYaw=canPose&&ref.legFrame!=='panzer'?motion.hipYaw:0;ref.legGroup.rotation.y=hipYaw;
   const footTargets=ref.feet.map((leg,i)=>{
    const foot=new THREE.Vector3(...motion.feet[i]);
@@ -184,6 +184,7 @@ export class ArenaRenderer{
     const a=u.attack||u.motion,r=motionRhythm('sword',a),p=Math.min(1,a.elapsed/a.duration),t=Math.max(0,Math.min(1,(p-r.windup*.5)/(r.contactEnd-r.windup*.5))),phase=a.weapon==='sword'&&a.charge>0&&!a.skill?stepPhase(a):t*t*(3-2*t),distance=Math.min(r.advance,Math.max(0,travel.z)/Math.max(.001,phase));
     foot.z+=distance*motion.footStride[i];foot.sub(travel).applyAxisAngle(new THREE.Vector3(0,1,0),(motion.plantYaw??facing)-facing);
    }
+   if(approachWeight>0&&u.grounded){const phase=Math.sin(approach.elapsed/approach.duration*Math.PI*2+(i?Math.PI:0));foot.lerp(new THREE.Vector3(leg.userData.side*.105,.035+Math.max(0,phase)*.065,phase*.13),approachWeight);}
    if(!canPose)foot.set(leg.userData.side*.105,.035,.045);
    else if(!u.grounded){foot.y+=.075;foot.z-=.055;}
    else if(!u.attack&&!u.motion&&speed>.2){const phase=stride*(i?1:-1);foot.z+=phase*.11;foot.y+=Math.max(0,phase)*.06;}

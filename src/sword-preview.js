@@ -7,7 +7,9 @@ const renderer=new ArenaRenderer(document.querySelector('#arena'));
 renderer.mode='inspection';renderer.scene.fog=null;renderer.floor(14,14);
 renderer.light.shadow.camera.left=-3;renderer.light.shadow.camera.right=3;renderer.light.shadow.camera.top=3;renderer.light.shadow.camera.bottom=-3;renderer.light.shadow.camera.updateProjectionMatrix();
 const names=['斜め斬り','斬り返し','斬り上げ','振り下ろし'];
-let battle,model,targetModel,selected=new URLSearchParams(location.search).get('mode')==='charge'?4:-1,playing=true,speed=1,yaw=2.2,pitch=.12,distance=2.9,accumulator=0,pressing=false,finishedAt=null,withShield=true,withTarget=true,chargeLevel=1,manualMode=false,manualHeld=false,manualCancel=false;
+const approachMode=new URLSearchParams(location.search).get('mode')==='approach';
+let battle,model,targetModel,selected=new URLSearchParams(location.search).get('mode')==='charge'?4:approachMode?0:-1,playing=true,speed=1,yaw=2.2,pitch=.12,distance=2.9,accumulator=0,pressing=false,finishedAt=null,withShield=true,withTarget=true,chargeLevel=1,manualMode=false,manualHeld=false,manualCancel=false;
+if(approachMode)document.querySelector('header p').textContent='前方向入力で高速踏み込み · ドラッグで回転';
 const status=document.querySelector('#pose'),holdButton=document.querySelector('#charge-hold');
 // Only this inspection page anchors and replenishes its training target.
 // Combat hit timing and the attacker's collision-limited step use the real Battle.
@@ -21,7 +23,7 @@ function reset(){
  if(targetModel)targetModel.root.traverse(m=>{if(m.isMesh&&m.userData.previewGhost)m.material.dispose();});
  const config=defaultConfig();config.sets[0]={item:'weapon:sword',shield:withShield?'shield:basic':null};
  battle=new Battle({allies:[config],enemies:[defaultConfig()],setup:{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true},getItem:id=>CATALOG[id]});
- battle.countdown=0;battle.training.freezeAI=true;battle.training.infinite=true;Object.assign(battle.human,{x:0,z:0,yaw:0});holdTarget();battle.human.target=withTarget?battle.entities[1].id:null;
+ battle.countdown=0;battle.training.freezeAI=true;battle.training.infinite=true;Object.assign(battle.human,{x:0,z:approachMode?-1.7:0,yaw:0});holdTarget();battle.human.target=withTarget?battle.entities[1].id:null;
  model=createRobot(config,id=>CATALOG[id]);model.active=0;renderer.world.add(model.root);
  targetModel=createRobot(defaultConfig(),id=>CATALOG[id],1);targetModel.active=0;for(const w of targetModel.weaponAttachments)w.visible=false;targetModel.root.traverse(m=>{if(m.isMesh&&m!==targetModel.ring&&!targetModel.weaponTrails.some(t=>t.mesh===m)){m.castShadow=false;m.material=m.material.clone();m.material.transparent=true;m.material.opacity=.32;m.material.depthWrite=false;m.userData.previewGhost=true;}});renderer.world.add(targetModel.root);accumulator=0;pressing=false;finishedAt=null;
  if(selected>=0&&selected<4){battle.human.combo=(selected+3)%4;battle.human.comboWindow=1;}
@@ -31,6 +33,7 @@ function step(){
  const first=!u.attack&&!u.motion&&battle.time<.2,follow=selected<0&&u.combo<3&&u.attack&&!u.queuedAttack&&rt.cooldown<=.15&&rt.cooldown>0;
  if(selected===4){const holdTime=battle.maxCharge(u)*chargeLevel+(chargeLevel===1?.25:0);input=manualMode?{attack:manualHeld,guard:manualCancel}:{attack:battle.time<holdTime};manualCancel=false;}
  else if(pressing)pressing=false;else if(first||follow){input={attack:true};pressing=true;}
+ if(approachMode&&u.lastAttackHeld&&!input.attack)input.z=1;
  holdTarget();battle.tick(1/120,input);holdTarget();battle.consumeEvents();
  if(!u.attack&&!u.motion&&battle.time>.3&&!u.charging){finishedAt??=battle.time;if(!manualMode&&battle.time-finishedAt>.65)reset();}
 }
@@ -39,7 +42,7 @@ function draw(){
  // The fixed, translucent training target makes blade entry visible. The
  // camera frames both robots; the stationary floor and shadows make
  // grounded feet and any sliding visible, rather than hiding root movement.
- const mobile=innerWidth<600,charged=selected===4,height=charged?.30:mobile?.42:.64,zoom=distance*(charged?(mobile?1.95:1.20):mobile?1.30:1),focusZ=withTarget&&!charged?(u.z+.9)/2:u.z;renderer.camera.position.set(u.x+Math.sin(yaw)*Math.cos(pitch)*zoom,u.y+height+Math.sin(pitch)*zoom,focusZ+Math.cos(yaw)*Math.cos(pitch)*zoom);renderer.camera.lookAt(u.x,u.y+height,focusZ);renderer.renderer.render(renderer.scene,renderer.camera);
+ const mobile=innerWidth<600,charged=selected===4,wide=charged||approachMode,height=wide?.30:mobile?.42:.64,zoom=distance*(wide?(mobile?(approachMode?2.25:1.95):1.20):mobile?1.30:1),focusZ=withTarget&&(!charged||approachMode)?(u.z+.9)/2:u.z;renderer.camera.position.set(u.x+Math.sin(yaw)*Math.cos(pitch)*zoom,u.y+height+Math.sin(pitch)*zoom,focusZ+Math.cos(yaw)*Math.cos(pitch)*zoom);renderer.camera.lookAt(u.x,u.y+height,focusZ);renderer.renderer.render(renderer.scene,renderer.camera);
  const attack=u.attack||u.motion,p=attack?attack.elapsed/attack.duration:1,r=motionRhythm('sword',attack||{}),phase=p<r.windup?'構え・踏み込み':p<r.contactEnd?'斬撃':p<r.follow?'振り抜き':'戻し';
  const amount=Math.min(1,u.charge/battle.maxCharge(u));status.textContent=u.charging&&!u.attack?`チャージ ${Math.round(amount*100)}%${amount===1?' · 最大チャージ · 離して攻撃':''}`:attack?`${attack.charge>0?'回転薙ぎ払い':`${u.combo+1}段目：${names[u.combo]}`}　·　${phase}`:'構え';
 }
