@@ -78,7 +78,7 @@ function walkingJoint(joint,gait){
  return {...joint,upper:upper.toArray(),bend:joint.bend+gait.bend,clavicle:joint.clavicle.map((v,i)=>v+gait.clavicle[i])};
 }
 function swordContacts(ref,u,motion,attack,feet,facing,transported){
- if(!u.grounded||!motion.sword||!motion.plantOrigin||u.guard||transported||ref.legFrame==='panzer'){
+ if(!u.grounded||!(motion.sword||motion.melee)||!motion.plantOrigin||u.guard||transported||ref.legFrame==='panzer'){
   delete ref.swordPlant;return;
  }
  const phase=Math.min(1,attack.elapsed/attack.duration),origin=motion.plantOrigin,
@@ -87,11 +87,22 @@ function swordContacts(ref,u,motion,attack,feet,facing,transported){
   attack.id&&previous.id&&attack.id!==previous.id||
   origin.some((v,i)=>Math.abs(v-previous.origin[i])>1e-7)||
   Math.hypot(u.x-previous.root[0],u.y-previous.root[1],u.z-previous.root[2])>.65;
- const state=reset?{signature,id:attack.id,origin:[...origin],feet:[null,null]}:previous,root=new THREE.Vector3(u.x,u.y,u.z),axis=new THREE.Vector3(0,1,0);
+ const inherited=reset&&motion.melee&&attack.blendFrom&&previous&&previous.phase>.5&&phase<.3&&
+  Math.hypot(u.x-previous.root[0],u.y-previous.root[1],u.z-previous.root[2])<.15;
+ const state=reset?{signature,id:attack.id,origin:[...origin],feet:inherited?previous.feet.map(p=>p?.clone()||null):[null,null],swings:[null,null]}:previous,root=new THREE.Vector3(u.x,u.y,u.z),axis=new THREE.Vector3(0,1,0);
  // Collision-limited travel can stop and resume after the target is launched.
  // Estimate the goal only during the swing; keep the world landing thereafter.
  for(const [i,foot]of feet.entries()){
-  if(motion.feet[i][1]>.035+1e-9){state.feet[i]=null;continue;}
+  if(motion.feet[i][1]>.035+1e-9){
+   if(motion.melee){
+    state.swings??=[null,null];const goal=foot.clone().applyAxisAngle(axis,facing).add(root),from=state.feet[i]||goal;
+    state.swings[i]??=from.clone();const t=motion.footProgress?.[i]??1;
+    goal.x=THREE.MathUtils.lerp(state.swings[i].x,goal.x,t);goal.z=THREE.MathUtils.lerp(state.swings[i].z,goal.z,t);
+    foot.copy(goal).sub(root).applyAxisAngle(axis,-facing);
+   }
+   state.feet[i]=null;continue;
+  }
+  if(state.swings)state.swings[i]=null;
   state.feet[i]??=foot.clone().applyAxisAngle(axis,facing).add(root);
   foot.copy(state.feet[i]).sub(root).applyAxisAngle(axis,-facing);
  }
@@ -156,7 +167,7 @@ function poseWeapons(ref,u=null,time=0,locomotion=null,landing=null){
   poseArm(arm,target,rotation);
  }
  // Keep both wrists within reach while following a two-handed weapon.
- supportWeapon(ref);
+ if(!(motion.twoHand&&(attack||motion.name==='chargeHold')&&!u?.guard&&!u?.dead&&!(u?.down>0)))supportWeapon(ref);
  if(shot){motion.body[0]-=recoil*2;motion.drop=-recoil*.25;motion.shift[1]-=recoil*.6;}
  return motion;
 }
@@ -239,16 +250,20 @@ export class ArenaRenderer{
   const landing=sampleLanding(ref,u,time),locomotion=sampleLocomotion(ref,u,time,{groundAt}),motion=poseWeapons(ref,u,time,locomotion,landing),canPose=!u.dead&&!(u.down>0||u.rise>0||u.knockdown),attack=u.attack||u.motion;
   // The visible cutting plane follows the same committed yaw as the hit arc.
   // Turn back toward a moving lock target smoothly during recovery.
-  let facing=u.yaw;if(canPose&&motion.sword&&motion.plantYaw!==undefined){const p=attack.elapsed/attack.duration,t=THREE.MathUtils.smoothstep(p,motion.spinYaw!==undefined?.78:.53,1);facing=motion.plantYaw+Math.atan2(Math.sin(u.yaw-motion.plantYaw),Math.cos(u.yaw-motion.plantYaw))*t;}facing+=motion.spinYaw||0;ref.root.rotation.y=facing;
+  let facing=u.yaw;if(canPose&&(motion.sword||motion.melee)&&motion.plantYaw!==undefined){const p=attack.elapsed/attack.duration,t=THREE.MathUtils.smoothstep(p,motion.melee?motionRhythm(ref.kind,attack).contactEnd:motion.spinYaw!==undefined?.78:.53,1);facing=motion.plantYaw+Math.atan2(Math.sin(u.yaw-motion.plantYaw),Math.cos(u.yaw-motion.plantYaw))*t;}facing+=motion.spinYaw||0;ref.root.rotation.y=facing;
   const reaction=u.knockdown?null:u.hitReaction,reactionWeight=reaction?Math.sin(Math.PI*Math.min(1,reaction.elapsed/reaction.duration)):0,relative=reaction?(reaction.yaw-facing):0,approach=attack?.approach,approachWeight=canPose&&approach?THREE.MathUtils.smoothstep(approach.elapsed,0,.025)*(1-THREE.MathUtils.smoothstep(approach.elapsed,approach.duration-.03,approach.duration))*Math.min(1,approach.travel/.1):0;
-  ref.bodyPivot.rotation.set(u.dead?Math.PI/3:u.knockdown?0:u.down>0?.9:motion.body[0]+(locomotion?.body[0]??(u.dashTime>0?.13:0))+(landing?.body[0]||0)+approachWeight*.08+Math.cos(relative)*(reaction?.strength||0)*reactionWeight,canPose?motion.body[1]+(locomotion?.body[1]||0):0,u.dead?.8:u.status==='stun'?Math.sin(time*30)*.03:canPose?motion.body[2]+(locomotion?.body[2]||0)+(landing?.body[2]||0)-Math.sin(relative)*(reaction?.strength||0)*reactionWeight:0);
-  const drop=canPose?motion.drop+(locomotion?.drop||0)+(landing?.drop||0):0,shift=canPose?motion.shift.map((v,i)=>v+(locomotion?.shift[i]||0)):[0,0],tracks=motion.sword&&ref.legFrame==='panzer';ref.bodyPivot.position.set(shift[0],.36+drop,shift[1]);ref.legGroup.position.set(tracks?0:shift[0]*.5,tracks?0:drop,tracks?0:shift[1]*.6);const hipYaw=canPose&&ref.legFrame!=='panzer'?(locomotion?.hipYaw??motion.hipYaw):0;ref.legGroup.rotation.y=hipYaw;
+  ref.bodyPivot.rotation.set(u.dead?Math.PI/3:u.knockdown?0:u.down>0?.9:motion.body[0]+(locomotion?.body[0]??(u.dashTime>0&&!motion.melee?.13:0))+(landing?.body[0]||0)+approachWeight*.08+Math.cos(relative)*(reaction?.strength||0)*reactionWeight,canPose?motion.body[1]+(locomotion?.body[1]||0):0,u.dead?.8:u.status==='stun'?Math.sin(time*30)*.03:canPose?motion.body[2]+(locomotion?.body[2]||0)+(landing?.body[2]||0)-Math.sin(relative)*(reaction?.strength||0)*reactionWeight:0);
+  const drop=canPose?motion.drop+(locomotion?.drop||0)+(landing?.drop||0):0,shift=canPose?motion.shift.map((v,i)=>v+(locomotion?.shift[i]||0)):[0,0],tracks=(motion.sword||motion.melee)&&ref.legFrame==='panzer';ref.bodyPivot.position.set(shift[0],.36+drop,shift[1]);ref.legGroup.position.set(tracks?0:shift[0]*.5,tracks?0:drop,tracks?0:shift[1]*.6);const hipYaw=canPose&&ref.legFrame!=='panzer'?(locomotion?.hipYaw??motion.hipYaw):0;ref.legGroup.rotation.y=hipYaw;
   const footTargets=ref.feet.map((leg,i)=>{
    const foot=new THREE.Vector3(...motion.feet[i]);
    if(canPose&&u.grounded&&motion.plantOrigin&&!u.guard){
     const travel=new THREE.Vector3(u.x-motion.plantOrigin[0],0,u.z-motion.plantOrigin[2]).applyAxisAngle(new THREE.Vector3(0,1,0),-(motion.plantYaw??facing));
-    const a=u.attack||u.motion,r=motionRhythm('sword',a),p=Math.min(1,a.elapsed/a.duration),t=Math.max(0,Math.min(1,(p-r.windup*.5)/(r.contactEnd-r.windup*.5))),phase=a.weapon==='sword'&&a.charge>0&&!a.skill?stepPhase(a):t*t*(3-2*t),distance=Math.min(r.advance,Math.max(0,travel.z)/Math.max(.001,phase));
-    foot.z+=distance*motion.footStride[i];foot.sub(travel).applyAxisAngle(new THREE.Vector3(0,1,0),(motion.plantYaw??facing)-facing);
+    const a=u.attack||u.motion,r=motionRhythm(a.weapon||ref.kind,a),p=Math.min(1,a.elapsed/a.duration),t=Math.max(0,Math.min(1,(p-r.windup*.5)/(r.contactEnd-r.windup*.5))),phase=motion.melee||a.weapon==='sword'&&a.charge>0&&!a.skill?stepPhase(a):t*t*(3-2*t),distance=Math.min(r.advance,Math.max(0,travel.z)/Math.max(.001,phase));
+    foot.z+=distance*motion.footStride[i];
+    // Carry sideways/backward collision corrections without amplifying them
+    // through the phase used to predict the authored forward step.
+    if(motion.melee){foot.x+=travel.x*motion.footStride[i];foot.z+=Math.min(0,travel.z)*motion.footStride[i];}
+    foot.sub(travel).applyAxisAngle(new THREE.Vector3(0,1,0),(motion.plantYaw??facing)-facing);
    }
    if(approachWeight>0&&u.grounded){const phase=Math.sin(approach.elapsed/approach.duration*Math.PI*2+(i?Math.PI:0));foot.lerp(new THREE.Vector3(leg.userData.side*.105,.035+Math.max(0,phase)*.065,phase*.13),approachWeight);}
    if(!canPose)foot.set(leg.userData.side*.105,.035,.045);
@@ -257,9 +272,9 @@ export class ArenaRenderer{
    else if(groundAt&&ref.locomotion.mode==='idle'&&!ref.locomotion.started){const ground=foot.clone().applyAxisAngle(new THREE.Vector3(0,1,0),facing);foot.y=groundAt(u.x+ground.x,u.z+ground.z)+.035-u.y;}
    return foot;
   });
-  if(canPose)swordContacts(ref,u,motion,attack,footTargets,facing,approach?.active||approachWeight>0);
+  if(canPose)swordContacts(ref,u,motion,attack,footTargets,facing,approach?.active||approachWeight>0||motion.melee&&u.dashTime>0&&(attack?.elapsed??1)>1e-9);
   else delete ref.swordPlant;
-  if(canPose&&u.grounded&&(motion.sword||locomotion||groundAt&&ref.locomotion.mode==='idle')&&ref.legFrame!=='panzer'){
+  if(canPose&&u.grounded&&(motion.sword||motion.melee||locomotion||groundAt&&ref.locomotion.mode==='idle')&&ref.legFrame!=='panzer'){
    // Preserve authored ground contacts: lower the pelvis a little when a raised
    // chest would otherwise exceed the leg's reach and pull a planted foot up.
    let settle=0;for(const [i,leg]of ref.feet.entries()){

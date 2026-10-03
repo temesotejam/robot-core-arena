@@ -38,6 +38,12 @@ jobs:
       - run: node scripts/stagger-browser.cjs
       - run: node scripts/approach-browser.cjs
       - run: node scripts/charge-browser.cjs
+      - run: node scripts/melee-motion-browser.cjs --matrix-only
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: melee-motion-review
+          path: /tmp/robot-melee-motion/final/*.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:

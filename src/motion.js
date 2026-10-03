@@ -1,5 +1,6 @@
 import * as THREE from '../vendor/three.module.min.js';
 import {swordMotion,swordChargeHold,swordSpinTurn} from './sword-motion.js';
+import {sampleMelee,meleeContact} from './melee-motion.js';
 // Original procedural poses, informed by the two supplied gameplay videos.
 // Weapon counts/intervals remain our game specification, not measurements of the videos.
 export const COMBO_CLIPS={
@@ -38,7 +39,8 @@ export function comboClip(kind,stage=0){const clips=COMBO_CLIPS[kind];return cli
 export function motionRhythm(kind,attack={}){
  const r=RHYTHMS[kind]||RHYTHMS.sword;
  if(kind==='sword'&&attack.charge>0&&!attack.skill)return {...r,windup:.20,contactEnd:.78,follow:.90,advance:.10*(1+.35*clamp(attack.charge))};
- return attack.charge>.5?{...r,windup:Math.max(.26,r.windup),advance:r.advance*1.35}:r;
+ const contact=meleeContact(kind,attack),out=attack.charge>.5?{...r,windup:Math.max(.26,r.windup),advance:r.advance*1.35}:r;
+ return contact?{...out,windup:contact.start,contactEnd:contact.end}:out;
 }
 export function contactPhase(attack){
  // Sword poses reach the front target after acceleration. Calibrate
@@ -114,6 +116,7 @@ function frames(kind,name){
 function clipName(kind,attack){return attack.skill==='tech'&&['naginata','scythe'].includes(kind)?'spin':attack.charge>.5&&!['rapier','lance','knuckle'].includes(kind)?['hammer','naginata','scythe'].includes(kind)?'hammerSlam':'overhead':comboClip(kind,attack.combo||0);}
 export function sampleMotion(kind,attack,{nextCombo=null,charging=null,hasShield=attack?.blendFrom?.hasShield??charging?.from?.hasShield??false}={}){
  if(kind==='sword'&&(!attack||!attack.skill)){if(!attack&&charging)return swordChargeHold({...charging,hasShield});return swordMotion(attack,{nextCombo,hasShield});}
+ const melee=sampleMelee(kind,attack,{nextCombo,charging,hasShield});if(melee)return melee;
  const base=readyFrame(kind);if(!attack||!COMBO_CLIPS[kind])return {name:'ready',...base};
  const name=clipName(kind,attack),c=frames(kind,name),r=motionRhythm(kind,attack),p=clamp(attack.elapsed/attack.duration),start=attack.blendFrom||base;
  let out;
