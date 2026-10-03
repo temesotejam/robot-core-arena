@@ -46,15 +46,16 @@ export function sampleMelee(kind,attack,{nextCombo=null,charging=null,hasShield=
  }
  // Gather into the following attack instead of standing upright between hits.
  // The simulation saves this exact connected pose as the next attack's start.
- if(nextCombo!==null&&p>(profile.chainStart??.70)){
+ const chainStart=clip.chainStart??profile.chainStart??.70;
+ if(nextCombo!==null&&p>chainStart){
   const next=meleeClip(kind,{combo:nextCombo},{legFrame}),preparation=next.prepare||keysFor(next,hasShield)[1][1];
-  out=blendMelee(out,preparation,(profile.chainAmount??.82)*ramp(p,profile.chainStart??.70,1));
+  out=blendMelee(out,preparation,(profile.chainAmount??.82)*ramp(p,chainStart,1));
   if(profile.chainStart!==undefined)out={...out,preparedNext:nextCombo%profile.clips.length};
  }
  const contact=clip.contact||{start:.25,center:.4,end:.55},lead=profile.lead??(kind==='knuckle'||out.twoHand?1:0),rear=1-lead;
  if(clip.authoredFeet){
-  const feet=out.feet.map(v=>[...v]),gather=ramp(p,.72,.96),phase=ramp(p,contact.start*.5,contact.end),
-   footStride=[gather,p<.70?phase*ramp(p,0,.18):1],footProgress=[gather,1];
+  const feet=out.feet.map(v=>[...v]),gather=ramp(p,clip.chainStart??.72,.97),phase=ramp(p,contact.start*.5,contact.end),
+   footStride=[gather,p<(clip.chainStart??.70)?phase*ramp(p,0,.18):1],footProgress=[gather,1];
   // The right foot carries the kick. Gather it only after the left has landed.
   feet[0][1]=.035+.018*Math.sin(Math.PI*gather);
   return {...out,name:clip.name,strikingSide:clip.strikingSide,strikingLimb:clip.strikingLimb,feet,footStride,footProgress,plantOrigin:attack.origin,plantYaw:attack.yaw};
