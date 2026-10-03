@@ -3,6 +3,8 @@ import {motionRhythm} from './motion.js';
 // Prototype balance values: resilience to interruption, not damage reduction.
 export const POISE={lance:34,naginata:38,scythe:42,hammer:52};
 export const INTERRUPT_RECOVERY=.14;
+// Ordinary melee combos only cause a flinch on the finishing hit.
+export const STAGGER={duration:.30};
 export function poiseActive(attack){
  if(!attack?.normal||!attack.poise||attack.exhausted)return false;
  const rhythm=motionRhythm(attack.weapon,attack);

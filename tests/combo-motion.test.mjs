@@ -117,8 +117,8 @@ test('全身の脚関節がつながり、待機・歩行・コンボで足が�
   }
  }
 });
-test('命中した方向へ被弾姿勢を付け、時間経過で消え、ポーズでは止まる',()=>{
- const b=battle('rapier'),u=b.human,v=b.entities[1];Object.assign(u,{x:0,z:0,yaw:0});Object.assign(v,{x:0,z:.8});u.target=v.id;b.attack(u);advance(b,.1);assert(v.hitReaction);assert.equal(v.hitReaction.yaw,0);
+test('コンボ終段の命中方向へのけぞり、時間経過で消え、ポーズでは止まる',()=>{
+ const b=battle('rapier'),u=b.human,v=b.entities[1];Object.assign(u,{x:0,z:0,yaw:0});Object.assign(v,{x:0,z:.8});u.target=v.id;u.combo=u.stats.weapon.combo-2;u.comboWindow=1;b.attack(u);advance(b,.1);assert(v.hitReaction);assert.equal(v.hitReaction.kind,'stagger');assert.equal(v.hitReaction.yaw,0);
  const ref=createRobot(v.config,id=>CATALOG[id]);ref.active=0;ArenaRenderer.prototype.animateRobot.call({},ref,v,b.time);assert(Math.hypot(ref.bodyPivot.rotation.x,ref.bodyPivot.rotation.z)>.01);
  const snapshot=JSON.stringify(v.hitReaction);b.paused=true;advance(b,.1);assert.equal(JSON.stringify(v.hitReaction),snapshot);b.paused=false;advance(b,.25);assert.equal(v.hitReaction,null);
 });

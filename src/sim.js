@@ -2,7 +2,7 @@ import {swordSpinAngle,swordSpinTurn} from './sword-motion.js';
 import {WEAPONS,SPECIALS,STAGES,DIFFICULTIES,STATUS} from './data.js';
 import {aggregate,cost,clone} from './customize.js';
 import {contactPhase,motionRhythm,stepPhase,swingDirection,sampleMotion} from './motion.js';
-import {POISE,INTERRUPT_RECOVERY,absorbImpact} from './combat.js';
+import {POISE,INTERRUPT_RECOVERY,STAGGER,absorbImpact} from './combat.js';
 const TAU=Math.PI*2,GRAVITY=18,RADIUS=.28;
 export const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 export const distance=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
@@ -135,7 +135,7 @@ export class Battle{
   if(['shotgun','heavyShotgun'].includes(packet.weapon)){const near=packet.weapon==='shotgun'?3:4,max=this.range(u),d=distance(u,v);power*=lerp(1,.3,clamp((d-near)/(max-near),0,1));if(this.activeBuff(u)?.weapon==='shotgun'&&d<=near)power*=1.2;}
   const hitKey=`${group}:${v.id}`;if(v.status==='freeze'&&v.statusTime>0){v.status=null;v.statusTime=0;v.statusImmune=1;this.hitGroups.set(hitKey,this.time+.2);}if(this.hitGroups.has(hitKey))power*=1.25;
   let damage=damageValue(at,power,df,crit);if(guard){const guardDamage=damage*.3*(this.activeBuff(u)&&['hammer','heavyShotgun'].includes(packet.weapon)?1.5:1);v.guardDur=Math.max(0,v.guardDur-guardDamage);v.guardDelay=1;damage*=v.stats.shield?.3:.6;if(v.guardDur<=0&&!v.stats.passives.has('guardOff')){v.guard=false;v.guardBreak=1.2;v.guardDur=(v.stats.shield?100:60)*.5;this.event('guardBreak',{unit:v.id});}}
-  if(v.stats.passives.has('save'))damage*=.9;damage=Math.max(1,Math.round(damage));const actual=Math.min(v.lp,damage);v.lp=Math.max(0,v.lp-actual);u.dealt+=actual;v.received+=actual;v.hitFlash=.12;v.hitReaction={elapsed:0,duration:guard?.12:.19,yaw:angle(u,v),strength:guard?.045:['hammer','bazooka','sniper','heavyShotgun'].includes(packet.weapon)?.19:.10,guard};
+  if(v.stats.passives.has('save'))damage*=.9;damage=Math.max(1,Math.round(damage));const actual=Math.min(v.lp,damage);v.lp=Math.max(0,v.lp-actual);u.dealt+=actual;v.received+=actual;v.hitFlash=.12;if(v.hitReaction?.kind!=='stagger'||v.stun<=0)v.hitReaction={kind:guard?'guard':'impact',elapsed:0,duration:.12,yaw:angle(u,v),strength:guard?.045:0,guard};
   const hitBonus=!packet.cPaid.has(v.id);packet.cPaid.add(v.id);if(packet.normal&&u.bp>0){const aoeAlready=packet.cBonusUsed===true;const hits=packet.weapon==='dualSword'?2:1;u.c=Math.min(500,u.c+((hitBonus&&!aoeAlready?10*hits:0)+actual*.6)*u.stats.output);packet.cBonusUsed=true;}if(v.bp>0)v.c=Math.min(500,v.c+actual*.2*v.stats.output);
   this.event('hit',{unit:v.id,attacker:u.id,x:v.x,y:v.y+.6,z:v.z,damage:actual,crit,guard});
   if(packet.fb&&packet.fbTarget===v.id&&v.lp<=v.stats.lp*.2&&visible(this.stage,u,v)){v.lp=0;packet.fbDone=true;if(u.attack)u.attack.fbDone=true;this.event('fb',{unit:v.id,attacker:u.id});}
@@ -143,11 +143,21 @@ export class Battle{
   if(!guard&&!packet.exhausted){this.react(u,v,packet,share);this.statusRoll(u,v,packet,group);}return actual;
  }
  interruptAttack(v){if(v.attack?.weapon==='sword'&&v.attack.charge>0&&!v.attack.skill)v.yaw=v.attack.yaw+Math.PI*2*swordSpinTurn(v.attack.elapsed/v.attack.duration);if(v.attack){this.runtime(v).cooldown=Math.min(this.runtime(v).cooldown,INTERRUPT_RECOVERY);}v.attack=null;v.motion=null;v.queuedAttack=null;v.actionTime=0;v.charging=false;v.charge=0;v.chargePose=null;v.comboWindow=0;}
- react(u,v,p,share=1){if(v.statusTime>0)return;const w=p.weapon,buff=this.activeBuff(v);if(buff?.weapon==='hammer'&&(v.attack||v.actionTime>0))return;if(absorbImpact(v.attack,p,share)){if(v.hitReaction)v.hitReaction.strength*=.25;this.event('brace',{unit:v.id,remaining:v.attack.poise.remaining,max:v.attack.poise.max});return;}if(p.skill==='tech'&&w==='knuckle'||w==='knuckle'&&p.finisher){this.interruptAttack(v);if(v.grounded){v.grounded=false;v.jumpsUsed=Math.max(v.jumpsUsed,1);v.vy=Math.sqrt(2*GRAVITY*1.2);v.stun=.15;}else v.stun=Math.max(v.stun,.1);}
+ flinch(u,v,duration=STAGGER.duration){this.interruptAttack(v);v.stun=Math.max(v.stun,duration);v.hitReaction={kind:'stagger',elapsed:0,duration:v.stun,yaw:angle(u,v),strength:.30,guard:false};this.event('stagger',{unit:v.id,attacker:u.id,duration:v.stun});}
+ react(u,v,p,share=1){if(v.statusTime>0)return;const w=p.weapon,buff=this.activeBuff(v);if(buff?.weapon==='hammer'&&(v.attack||v.actionTime>0))return;if(absorbImpact(v.attack,p,share)){this.event('brace',{unit:v.id,remaining:v.attack.poise.remaining,max:v.attack.poise.max});return;}
+  if(p.normal&&!p.charge&&!WEAPONS[w].ranged){
+   // Damage and a small hit response on every cut, but only the combo's
+   // finishing hit produces the flinch that cancels attack and queued input.
+   if(p.finisher){this.flinch(u,v);const push=w==='hammer'?.65:.35;this.move(v,Math.sin(u.yaw)*push,Math.cos(u.yaw)*push,0);}return;
+  }
+  if(p.skill==='tech'&&w==='knuckle'){this.flinch(u,v,.15);if(v.grounded){v.grounded=false;v.jumpsUsed=Math.max(v.jumpsUsed,1);v.vy=Math.sqrt(2*GRAVITY*1.2);}}
   else if(p.finisher||w==='bazooka'){let force=['hammer','bazooka'].includes(w)?3.4:1.7;if(this.activeBuff(u)&&['hammer','shotgun','heavyShotgun'].includes(w))force*=1.4;this.move(v,Math.sin(u.yaw)*force,Math.cos(u.yaw)*force,0);this.knockDown(v);}
-  else if(!['machinegun','assault','dualGun','missile'].includes(w)||v.attack?.poise?.remaining===0){v.stun=Math.max(v.stun,w==='sniper'||p.charge>.9?.3:Math.min(.25,u.stats.weapon.interval*.6));this.interruptAttack(v);}
+  else if(p.charge>0||w==='sniper'||!p.normal&&!['machinegun','assault','dualGun','missile'].includes(w)){
+   // Do not restart a flinch on each pellet/volley of the same strong attack.
+   if(v.stun<=0)this.flinch(u,v);
+  }
  }
- knockDown(u){u.status=null;u.statusTime=0;u.stun=0;u.down=.8;u.rise=0;u.guard=false;this.interruptAttack(u);this.schedule(.8,()=>{if(!u.dead){u.rise=.6;u.statusImmune=1;}});}
+ knockDown(u){u.hitReaction=null;u.status=null;u.statusTime=0;u.stun=0;u.down=.8;u.rise=0;u.guard=false;this.interruptAttack(u);this.schedule(.8,()=>{if(!u.dead){u.rise=.6;u.statusImmune=1;}});}
  kill(v,u){if(v.attack?.weapon==='sword'&&v.attack.charge>0&&!v.attack.skill)this.interruptAttack(v);v.dead=true;v.lp=0;v.attack=null;v.guard=false;v.target=null;u.kills++;this.event('kill',{unit:v.id,attacker:u.id,x:v.x,y:v.y,z:v.z});for(const e of this.entities)if(e.target===v.id)e.target=null;if(v.human){this.observed=this.entities.find(e=>e.team===0&&!e.dead)||v;this.event('spectate',{unit:this.observed.id});}}
  explode(b,pos,direct=null){const u=this.entities.find(u=>u.id===b.owner);if(!u)return;this.event('explosion',{x:pos.x,y:pos.y,z:pos.z,radius:b.blast});for(const v of this.enemiesOf(u)){const d=Math.hypot(v.x-pos.x,v.y+.55-pos.y,v.z-pos.z);if(d>b.blast+.3&&v!==direct)continue;if(v!==direct&&!lineClear(this.stage,{x:pos.x,y:Math.max(.06,pos.y),z:pos.z},{x:v.x,y:v.y+.55,z:v.z}))continue;const factor=v===direct?1:lerp(1,.3,clamp(d/b.blast,0,1));this.hit(u,v,b.packet,b.share*factor,pos,b.group);}}
  projectileStep(b,dt){const u=this.entities.find(u=>u.id===b.owner);if(!u)return false;b.life-=dt;if(b.life<=0||b.travel>=b.range)return false;
