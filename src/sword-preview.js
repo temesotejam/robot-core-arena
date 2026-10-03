@@ -28,7 +28,7 @@ function reset(){
  targetModel=createRobot(defaultConfig(),id=>CATALOG[id],1);targetModel.active=0;for(const w of targetModel.weaponAttachments)w.visible=false;targetModel.root.traverse(m=>{if(m.isMesh&&m!==targetModel.ring&&!targetModel.weaponTrails.some(t=>t.mesh===m)){m.castShadow=false;m.material=m.material.clone();m.material.transparent=true;m.material.opacity=.32;m.material.depthWrite=false;m.userData.previewGhost=true;}});renderer.world.add(targetModel.root);accumulator=0;pressing=false;finishedAt=null;
  // Individual-cut inspection explicitly selects a pose; gameplay and the
  // continuous review still require a real hit before advancing.
- if(selected>=0&&selected<4){Object.assign(battle.human,{combo:(selected+3)%4,comboWindow:1,comboHit:true,comboChain:{weapon:'sword',set:0,hits:new Set()}});}
+ if(selected>=0&&selected<4){Object.assign(battle.human,{combo:(selected+3)%4,comboWindow:1,comboHit:true,comboChain:{weapon:'sword',set:0,hits:new Map()}});}
 }
 function step(){
  const u=battle.human,rt=battle.runtime(u);let input={};

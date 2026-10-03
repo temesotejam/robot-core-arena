@@ -54,7 +54,7 @@ export class Battle{
   u.guard=false;u.rise=0;u.combo=next;u.comboHit=false;u.comboWindow=charge>0||w.ranged?0:w.interval*1.6+.32;const target=this.targetOf(u);if(target)u.yaw=angle(u,target);
   const buff=this.activeBuff(u),speedFactor=buff&&['sword','rapier','dualSword','knuckle','pistol','machinegun','dualGun'].includes(w.id)?(w.id==='machinegun'||w.id==='dualSword'?.75:.8):1;
   const interval=(u.stats.item.interval||w.interval)*(swordCharged?5/3:1)*speedFactor*(finisher?1.6:1);rt.cooldown=interval;u.actionTime=w.ranged?Math.min(.16,interval*.35):Math.min(.28,interval*.55);u.charge=0;
-  const comboChain=!w.ranged&&charge===0?(next!==0&&u.comboChain?.weapon===w.id&&u.comboChain?.set===u.active?u.comboChain:{weapon:w.id,set:u.active,hits:new Set()}):null;u.comboChain=comboChain;
+  const comboChain=!w.ranged&&charge===0?(next!==0&&u.comboChain?.weapon===w.id&&u.comboChain?.set===u.active?u.comboChain:{weapon:w.id,set:u.active,hits:new Map()}):null;u.comboChain=comboChain;
   const packet={id:`a${this.serial++}`,owner:u.id,attackStats:u.stats,coefficient:power*(wasExhausted?.7:1),normal:true,charge,finisher,combo:next,comboChain,exhausted:wasExhausted,hits:new Set(),cPaid:new Set(),statusPaid:new Set(),freezeBoost:new Set(),yaw:u.yaw,weapon:w.id};
   if(w.ranged){rt.ammo--;this.fireVolley(u,packet);if(rt.ammo===0){rt.reloadPending=Math.max(u.actionTime,interval);}}
   else {u.attack={...packet,elapsed:0,duration:interval,blendFrom,origin:[u.x,u.y,u.z],poise:POISE[w.id]&&!wasExhausted?{max:POISE[w.id],remaining:POISE[w.id]}:null,previous:0,range:w.range*(buff&&['sword','naginata','scythe','knuckle'].includes(w.id)?1.25:1),arc:w.arc*(buff&&['naginata','scythe'].includes(w.id)?1.2:1),thrust:['rapier','lance'].includes(w.id)};
@@ -140,7 +140,7 @@ export class Battle{
   let damage=damageValue(at,power,df,crit);if(guard){const guardDamage=damage*.3*(this.activeBuff(u)&&['hammer','heavyShotgun'].includes(packet.weapon)?1.5:1);v.guardDur=Math.max(0,v.guardDur-guardDamage);v.guardDelay=1;damage*=v.stats.shield?.3:.6;if(v.guardDur<=0&&!v.stats.passives.has('guardOff')){v.guard=false;v.guardBreak=1.2;v.guardDur=(v.stats.shield?100:60)*.5;this.event('guardBreak',{unit:v.id});}}
   if(v.stats.passives.has('save'))damage*=.9;damage=Math.max(1,Math.round(damage));const actual=Math.min(v.lp,damage);v.lp=Math.max(0,v.lp-actual);u.dealt+=actual;v.received+=actual;v.hitFlash=.12;if(v.hitReaction?.kind!=='stagger'||v.stun<=0)v.hitReaction={kind:guard?'guard':'impact',elapsed:0,duration:.12,yaw:angle(u,v),strength:guard?.045:0,guard};
   const hitBonus=!packet.cPaid.has(v.id);packet.cPaid.add(v.id);if(packet.normal&&u.bp>0){const aoeAlready=packet.cBonusUsed===true;const hits=packet.weapon==='dualSword'?2:1;u.c=Math.min(500,u.c+((hitBonus&&!aoeAlready?10*hits:0)+actual*.6)*u.stats.output);packet.cBonusUsed=true;}if(v.bp>0)v.c=Math.min(500,v.c+actual*.2*v.stats.output);
-  if(packet.normal&&!packet.charge&&!packet.finisher&&!WEAPONS[packet.weapon].ranged)packet.comboChain?.hits.add(v.id);
+  if(packet.normal&&!packet.charge&&!packet.finisher&&!WEAPONS[packet.weapon].ranged)packet.comboChain?.hits.set(v.id,packet.combo);
   this.event('hit',{unit:v.id,attacker:u.id,x:v.x,y:this.hitY(v)+.05,z:v.z,damage:actual,crit,guard});
   if(packet.fb&&packet.fbTarget===v.id&&v.lp<=v.stats.lp*.2&&visible(this.stage,u,v)){v.lp=0;packet.fbDone=true;if(u.attack)u.attack.fbDone=true;this.event('fb',{unit:v.id,attacker:u.id});}
   if(v.lp<=0){this.kill(v,u);return actual;}
@@ -150,12 +150,13 @@ export class Battle{
  flinch(u,v,duration=STAGGER.duration){this.interruptAttack(v);v.stun=Math.max(v.stun,duration);v.hitReaction={kind:'stagger',elapsed:0,duration:v.stun,yaw:angle(u,v),strength:.30,guard:false};this.event('stagger',{unit:v.id,attacker:u.id,duration:v.stun});}
  react(u,v,p,share=1){if(v.statusTime>0||v.knockdown?.phase==='air')return;const w=p.weapon,buff=this.activeBuff(v);if(buff?.weapon==='hammer'&&(v.attack||v.actionTime>0))return;if(absorbImpact(v.attack,p,share)){this.event('brace',{unit:v.id,remaining:v.attack.poise.remaining,max:v.attack.poise.max});return;}
   if(p.normal&&!p.charge&&!WEAPONS[w].ranged){
-   // A finishing cut flinches. A launch additionally requires an earlier
-   // hit on this same opponent in this same attacker's ordinary combo.
-   if(p.finisher){if(p.comboChain?.hits.has(v.id))this.launchDown(u,v,w==='hammer');else if(v.stun<=0)this.flinch(u,v);}return;
+   // The immediately preceding cut must damage this same opponent.
+   // Earlier contact followed by hitting somebody else cannot qualify a launch.
+   if(p.finisher){if(p.combo>0&&p.comboChain?.hits.get(v.id)===p.combo-1)this.launchDown(u,v,w==='hammer');else if(v.stun<=0)this.flinch(u,v);}return;
   }
   if(p.skill==='tech'&&w==='knuckle'){this.flinch(u,v,.15);if(v.grounded){v.grounded=false;v.jumpsUsed=Math.max(v.jumpsUsed,1);v.vy=Math.sqrt(2*GRAVITY*1.2);}}
-  else if(p.finisher||w==='bazooka'){let force=['hammer','bazooka'].includes(w)?3.4:1.7;if(this.activeBuff(u)&&['hammer','shotgun','heavyShotgun'].includes(w))force*=1.4;this.move(v,Math.sin(u.yaw)*force,Math.cos(u.yaw)*force,0);this.knockDown(v);}
+  // Ordinary charge poses may use the final cut, but cannot inherit its fall.
+  else if((!p.normal&&p.finisher)||w==='bazooka'){let force=['hammer','bazooka'].includes(w)?3.4:1.7;if(this.activeBuff(u)&&['hammer','shotgun','heavyShotgun'].includes(w))force*=1.4;this.move(v,Math.sin(u.yaw)*force,Math.cos(u.yaw)*force,0);this.knockDown(v);}
   else if(p.charge>0||w==='sniper'||!p.normal&&!['machinegun','assault','dualGun','missile'].includes(w)){
    // Do not restart a flinch on each pellet/volley of the same strong attack.
    if(v.stun<=0)this.flinch(u,v);

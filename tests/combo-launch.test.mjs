@@ -27,9 +27,9 @@ test('全9近接・30/60/120fps：別の相手への命中で派生し、終段�
  }
 });
 
-test('各途中段を誰かに当て、終段の相手に途中段が1回でも当たっていれば吹き飛ばす',()=>{
+test('各途中段を誰かに当て、直前段と終段が同じ相手に命中したときだけ吹き飛ばす',()=>{
  for(const [kind,w]of Object.entries(WEAPONS).filter(([,w])=>!w.ranged))for(const first of [0,w.combo-2]){
-  const b=battle(kind),u=b.human,[v,other]=b.entities.filter(v=>v.team);for(let i=0;i<w.combo-1;i++)stage(b,u,i===first?v:other);const a=final(b,u,v);assert(a.comboChain.hits.has(v.id));assert.equal(v.knockdown?.phase,'air',`${kind}/${first}`);assert(!v.grounded);assert(v.vy>0);
+  const b=battle(kind),u=b.human,[v,other]=b.entities.filter(v=>v.team);for(let i=0;i<w.combo-1;i++)stage(b,u,i===first?v:other);const a=final(b,u,v);assert.equal(a.comboChain.hits.get(v.id),first);assert.equal(v.knockdown?.phase==='air',first===w.combo-2,`${kind}/${first}`);assert.equal(v.grounded,first!==w.combo-2);assert.equal(v.vy>0,first===w.combo-2);
  }
 });
 

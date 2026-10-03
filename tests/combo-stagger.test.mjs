@@ -28,7 +28,7 @@ test('終段の怯み中の追撃はダメージのみ加え、のけぞりの�
 });
 test('表示されたのけぞりと中断が一致し、ポーズ中は止まって、終了後に初段から再開できる',()=>{
  const b=duel(),[u,v]=b.entities,ref=createRobot(v.config,id=>CATALOG[id]);ref.active=0;b.attack(v);b.hit(u,v,packet(b,u));ArenaRenderer.prototype.animateRobot.call({},ref,v,0);assert(v.attack);assert.equal(v.hitReaction.strength,0);
- const comboChain={hits:new Set()};b.hit(u,v,packet(b,u,{comboChain}));b.hit(u,v,packet(b,u,{finisher:true,comboChain}));b.tick(STAGGER.duration/8);b.tick(STAGGER.duration/8);ArenaRenderer.prototype.animateRobot.call({},ref,v,b.time);assert.equal(v.attack,null);assert(new THREE.Vector3(0,1,0).applyQuaternion(ref.root.quaternion).y<.9);
+ const combo=u.stats.weapon.combo-1,comboChain={hits:new Map()};b.hit(u,v,packet(b,u,{combo:combo-1,comboChain}));b.hit(u,v,packet(b,u,{combo,finisher:true,comboChain}));b.tick(STAGGER.duration/8);b.tick(STAGGER.duration/8);ArenaRenderer.prototype.animateRobot.call({},ref,v,b.time);assert.equal(v.attack,null);assert(new THREE.Vector3(0,1,0).applyQuaternion(ref.root.quaternion).y<.9);
  const before=JSON.stringify([v.stun,v.hitReaction,v.knockdown,v.y]);b.paused=true;b.tick(.04);assert.equal(JSON.stringify([v.stun,v.hitReaction,v.knockdown,v.y]),before);b.paused=false;for(let i=0;i<55&&v.knockdown;i++)b.tick(.04);assert.equal(v.knockdown,null);assert.equal(v.hitReaction,null);assert.equal(v.stun,0);assert(b.attack(v));assert.equal(v.combo,0);
 });
 test('終段をガードするとコンボを維持し、疲労攻撃は怯ませず、チャージは独立して怯ませる',()=>{

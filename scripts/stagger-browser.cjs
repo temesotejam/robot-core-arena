@@ -23,6 +23,29 @@ try{
   cuts.push(result);assert(result.dealt>0&&!result.fault,JSON.stringify(result));assert.equal(result.interrupted,stage===3);assert.equal(result.kind,stage===3?'stagger':'impact');assert.equal(result.down,0);if(stage===3){assert(Math.abs(result.up-1)<1e-8&&!result.queued&&result.stun>0&&result.height===0);assert.equal(result.phase,undefined);}else assert(result.kept&&result.queued&&result.stun===0);
   await page.screenshot({path:`charge-artifacts/stagger-sword-${stage+1}.png`});
  }
+ // A stale hit on v must not qualify the last cut after the intervening cuts
+ // hit somebody else. A hammer charge using its final-cut pose is also ordinary
+ // charge damage, rather than a connected normal-combo knockdown.
+ const isolated=[];
+ for(const weapon of ['sword','hammer']){
+  const result=await page.evaluate(async weapon=>{
+   const app=window.appUnderTest;app.state.units[0].sets[0]={item:`weapon:${weapon}`,shield:null};app.startBattle();const b=app.battle;b.countdown=0;b.paused=true;b.rng=()=>.99;b.training.freezeAI=true;b.training.infinite=true;
+   const [u,v,other]=b.entities;for(const e of b.entities)Object.assign(e,{lp:10000,status:null,statusTime:0,buff:null,buffTime:0,guard:false});Object.assign(u,{x:0,z:0,yaw:0});Object.assign(v,{x:10,z:-10});Object.assign(other,{x:10,z:10});
+   const hitStages=weapon==='sword'?[v,other,other]:[other],damage=[];
+   for(let stage=0;stage<hitStages.length;stage++){
+    const target=hitStages[stage];for(const e of [v,other])Object.assign(e,{x:10,z:e===v?-10:10});Object.assign(target,{x:u.x,z:u.z+.8});u.target=target.id;const lp=target.lp;
+    if(!b.attack(u)||u.attack.combo!==stage)throw Error('Isolated launch regression could not reach its real cut');b.meleeStep(u,u.attack.duration*.9);damage.push(lp-target.lp);
+    b.paused=false;for(let i=0;i<100&&(u.attack||b.runtime(u).cooldown>0||u.actionTime>0);i++)b.tick(1/60);b.paused=true;if(u.attack||b.runtime(u).cooldown>0||u.actionTime>0)throw Error('Isolated launch regression did not become ready');
+   }
+   Object.assign(other,{x:10,z:10});Object.assign(v,{x:u.x,z:u.z+.8,yaw:Math.PI,target:u.id});u.target=v.id;if(!b.attack(v))throw Error('Regression victim could not attack');v.queuedAttack={charge:0,remaining:.2};const lp=v.lp,before=[v.x,v.y,v.z];
+   if(!b.attack(u,weapon==='hammer'?.16:0)||u.attack.combo!==hitStages.length)throw Error('Isolated regression final cut could not start');const {combo,charge,normal,finisher}=u.attack;b.meleeStep(u,u.attack.duration*.9);damage.push(lp-v.lp);for(let i=0;i<7;i++)b.updateUnit(v,{},1/60);
+   app.renderer.cameraYaw=-.75;app.renderer.manualYaw=-.75;app.renderer.render(b,1/60,b.time);const {Vector3}=await import('/vendor/three.module.min.js'),ref=app.renderer.robots.get(v.id);
+   return {weapon,damage,combo,charge,normal,finisher,interrupted:v.attack===null,queued:!!v.queuedAttack,kind:v.hitReaction?.kind,stun:v.stun,down:v.down,phase:v.knockdown?.phase,height:v.y,grounded:v.grounded,displacement:Math.hypot(v.x-before[0],v.y-before[1],v.z-before[2]),up:new Vector3(0,1,0).applyQuaternion(ref.root.quaternion).y,fault:app.frameError};
+  },weapon);
+  isolated.push(result);assert(result.damage.every(d=>d>0)&&result.normal&&result.finisher&&result.interrupted&&!result.queued&&result.kind==='stagger'&&result.stun>0&&result.down===0&&result.phase===undefined&&result.height===0&&result.grounded&&result.displacement===0&&Math.abs(result.up-1)<1e-8&&!result.fault,JSON.stringify(result));assert.equal(result.charge,weapon==='hammer'?.16:0);
+  await page.screenshot({path:`charge-artifacts/stagger-${weapon}-isolated-final.png`});
+ }
+ await page.evaluate(()=>{window.appUnderTest.state.units[0].sets[0]={item:'weapon:sword',shield:null};});
  // An actual connected four-cut sequence must still launch. No seeded hit ledger.
  const linked=await page.evaluate(async()=>{const app=window.appUnderTest;app.startBattle();const b=app.battle;b.countdown=0;b.paused=true;b.rng=()=>.99;b.training.freezeAI=true;b.training.infinite=true;const [u,v]=b.entities;Object.assign(u,{x:0,z:0,yaw:0,target:v.id,lp:10000});Object.assign(v,{x:0,z:.8,yaw:Math.PI,target:u.id,lp:10000});const damage=[];
   for(let stage=0;stage<3;stage++){const lp=v.lp;if(!b.attack(u))throw Error('Connected combo could not start');if(u.attack.combo!==stage)throw Error('Unexpected combo index');b.meleeStep(u,u.attack.duration*.9);damage.push(lp-v.lp);b.paused=false;for(let i=0;i<100&&(u.attack||b.runtime(u).cooldown>0||u.actionTime>0);i++)b.tick(1/60);b.paused=true;}
@@ -36,5 +59,5 @@ try{
  const rise=await page.evaluate(async()=>{const app=window.appUnderTest,b=app.battle;b.paused=true;const [u,v]=b.entities,p={id:'rise-hit',weapon:'sword',attackStats:u.stats,normal:true,coefficient:1,charge:0,finisher:true,exhausted:false,cPaid:new Set(),statusPaid:new Set(),freezeBoost:new Set()},lp=v.lp,damage=b.hit(u,v,p);app.renderer.render(b,1/60,b.time);const {Vector3}=await import('/vendor/three.module.min.js'),ref=app.renderer.robots.get(v.id);return {damage,sameLP:v.lp===lp,cPaid:p.cPaid.size,phase:v.knockdown.phase,rise:v.rise,up:new Vector3(0,1,0).applyQuaternion(ref.root.quaternion).y,canAttack:b.attack(v),canJump:b.jump(v)};});assert(rise.sameLP&&rise.damage===0&&rise.cPaid===0&&rise.rise>0&&rise.up>0&&rise.up<1&&!rise.canAttack&&!rise.canJump);await page.screenshot({path:'charge-artifacts/stagger-sword-rise.png'});
  await page.evaluate(()=>window.appUnderTest.battle.paused=false);await page.waitForFunction(()=>!window.appUnderTest.battle.entities[1].knockdown);
  const recovered=await page.evaluate(async()=>{const app=window.appUnderTest,b=app.battle;b.paused=true;const [u,v]=b.entities;app.renderer.render(b,1/60,b.time);const {Vector3}=await import('/vendor/three.module.min.js'),ref=app.renderer.robots.get(v.id);const up=new Vector3(0,1,0).applyQuaternion(ref.root.quaternion).y;const p={id:'standing-hit',weapon:'sword',attackStats:u.stats,normal:true,coefficient:1,charge:0,finisher:false,exhausted:false,cPaid:new Set(),statusPaid:new Set(),freezeBoost:new Set()};return {up,damage:b.hit(u,v,p),canAttack:b.attack(v),events:window.downReview,fault:app.frameError};});assert(recovered.damage>0&&recovered.canAttack&&Math.abs(recovered.up-1)<1e-8&&!recovered.fault);const [landed,stood,complete]=recovered.events;assert.equal(landed.type,'down');assert.equal(stood.type,'rise');assert.equal(complete.type,'recovered');assert(Math.abs(stood.time-landed.time-1)<.017);assert(Math.abs(complete.time-stood.time-.5)<.017);await page.screenshot({path:'charge-artifacts/stagger-sword-recovered.png'});
- assert.deepEqual(errors,[]);console.log('Combo stagger browser passed:',JSON.stringify({cuts,linked,airborne,down,rise,recovered}));
+ assert.deepEqual(errors,[]);console.log('Combo stagger browser passed:',JSON.stringify({cuts,isolated,linked,airborne,down,rise,recovered}));
 }catch(error){console.error(error);process.exitCode=1;}finally{await browser?.close();server.kill();}})();
