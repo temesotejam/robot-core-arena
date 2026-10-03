@@ -1,4 +1,5 @@
 import {swordSpinAngle,swordSpinTurn} from './sword-motion.js';
+import {GROUND_WALK_FACTOR} from './locomotion.js';
 import {WEAPONS,SPECIALS,STAGES,DIFFICULTIES,STATUS} from './data.js';
 import {aggregate,cost,clone} from './customize.js';
 import {contactPhase,motionRhythm,stepPhase,swingDirection,sampleMotion} from './motion.js';
@@ -108,7 +109,7 @@ export class Battle{
   u.bp=Math.max(0,u.bp-u.stats.burn*dt);if(u.regenWait===0&&!u.attack?.normal){u.tension=Math.min(100,u.tension+u.stats.regen*dt);if(u.tension>=25)u.exhausted=false;}if(!u.guard&&u.guardDelay===0)u.guardDur=Math.min(u.stats.shield?100:60,u.guardDur+20*dt);
   const disabled=this.incapacitated(u);if(disabled){u.queuedAttack=null;u.motion=null;u.comboWindow=0;u.comboHit=false;u.comboChain=null;u.controlLoss+=dt;u.freeTime=0;u.guard=false;u.charging=false;u.charge=0;u.chargePose=null;if(u.controlLoss>=12&&!u.knockdown){u.status=null;u.statusTime=0;u.stun=0;u.guardBreak=0;this.knockDown(u);u.statusImmune=1;u.controlLoss=0;this.event('escape',{unit:u.id});}}else {u.freeTime+=dt;if(u.freeTime>=.5)u.controlLoss=0;this.handleInput(u,input,dt);}
   if(u.human){const target=this.targetOf(u);if(u.target&&!target)u.target=null;if(target){if(distance(u,target)>lockRange(u.stats)*1.15)u.target=null;else if(!visible(this.stage,u,target)){u.lockOcclusion+=dt;if(u.lockOcclusion>=1)u.target=null;}else u.lockOcclusion=0;}}
-  let vx=0,vz=0;if(!disabled){if(u.dashTime>0){const speed=u.grounded?u.stats.dash:u.stats.airDash;vx=u.dashX*speed;vz=u.dashZ*speed;}else {let speed=u.stats.move*(u.guard?.35:1);const w=u.stats.weapon,stopped=u.grounded&&u.actionTime>0&&(w.id==='sniper'||['bazooka','missile'].includes(w.id)&&u.stats.frame!=='panzer');if(stopped)speed=0;if(w.id==='assault'&&u.actionTime>0&&!this.activeBuff(u))speed*=.85;vx=(input.x||0)*speed;vz=(input.z||0)*speed;}}
+  let vx=0,vz=0;if(!disabled){if(u.dashTime>0){const speed=u.grounded?u.stats.dash:u.stats.airDash;vx=u.dashX*speed;vz=u.dashZ*speed;}else {let speed=u.stats.move*(u.grounded&&!u.attack?GROUND_WALK_FACTOR:1)*(u.guard?.35:1);const w=u.stats.weapon,stopped=u.grounded&&u.actionTime>0&&(w.id==='sniper'||['bazooka','missile'].includes(w.id)&&u.stats.frame!=='panzer');if(stopped)speed=0;if(w.id==='assault'&&u.actionTime>0&&!this.activeBuff(u))speed*=.85;vx=(input.x||0)*speed;vz=(input.z||0)*speed;}}
   if(u.attack?.approach?.active){vx=0;vz=0;}const oldX=u.x,oldZ=u.z;
   if(u.attack?.approach&&!disabled&&u.dashTime<=0){this.move(u,0,0,dt);this.attackMove(u,u.attack,vx*dt,vz*dt);for(const motion of [u.attack,u.motion])if(motion?.origin){motion.origin[0]+=u.x-oldX;motion.origin[2]+=u.z-oldZ;}}else if(u.knockdown?.phase==='air')this.move(u,u.knockdown.vx*dt,u.knockdown.vz*dt,dt);else if(this.invulnerable(u))this.move(u,0,0,0);else this.move(u,vx*dt,vz*dt,dt);u.vx=(u.x-oldX)/dt;u.vz=(u.z-oldZ)/dt;
   if(u.attack){if(this.incapacitated(u)){this.interruptAttack(u);}else {this.meleeStep(u,dt);}}

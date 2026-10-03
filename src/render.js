@@ -3,6 +3,7 @@ import {FRAMES,WEAPONS} from './data.js';
 import {KNOCKDOWN,nextCombo} from './combat.js';
 import {sampleMotion,readyPose,motionRhythm,stepPhase} from './motion.js';
 import {swordArm} from './sword-motion.js';
+import {sampleLocomotion} from './locomotion.js';
 const mats=new Map(),boxes=new Map(),armorGeometries=new Map(),plateGeometries=new Map();
 // Cached meshes share resources across robots. Release only scene-owned GPU
 // resources, once each, when a weapon or a complete scene is replaced.
@@ -106,7 +107,7 @@ function recoveryPose(ref,u){
  for(const trail of ref.weaponTrails||[])trail.samples=[];
 }
 // Both the hangar and battle use these poses; attachments never need to cancel a shoulder rotation.
-function poseWeapons(ref,u=null,time=0){
+function poseWeapons(ref,u=null,time=0,locomotion=null){
  const w=WEAPONS[ref.kind],speed=u?Math.hypot(u.vx,u.vz):0,attack=u?.attack||(u?.motion?.weapon===w.id&&!w.ranged&&(!u.charging||u.motion.elapsed<u.motion.duration)?u.motion:null),motion=sampleMotion(w.id,attack,{nextCombo:u?.queuedAttack?nextCombo(u,u.queuedAttack.charge,w):null,charging:u?.charging?u.chargePose:null}),dual=['dualSword','dualGun','knuckle'].includes(w.id);
  const shot=u?.motion?.weapon===w.id&&w.ranged?u.motion:null,shotProgress=shot?THREE.MathUtils.clamp(shot.elapsed/shot.duration,0,1):0;
  const kick=kind=>({machinegun:.012,assault:.015,dualGun:.020,pistol:.028,shotgun:.035,rifle:.038,sniper:.050,heavyShotgun:.045,bazooka:.052,missile:.030})[kind]||.022;
@@ -116,7 +117,7 @@ function poseWeapons(ref,u=null,time=0){
   if(motion.joints&&!u?.guard&&(!u?.charging||attack||motion.name==='chargeHold')&&!u?.dead&&!(u?.down>0)){poseSwordArm(arm,motion.joints[i?'left':'right']);continue;}
   const side=arm.userData.side,armed=i===0||dual,p=armed&&!w.ranged?(i?motion.left:motion.right):readyPose(w.id,side),target=new THREE.Vector3(...p.position),rotation=new THREE.Euler(...p.rotation);
   if(armed&&w.ranged){const handRecoil=w.id==='dualGun'&&i===1?pulse((shotProgress-.12)/.88)*kick(w.id):recoil;target.z-=handRecoil;target.y+=handRecoil*.22;rotation.x=-handRecoil*(['pistol','shotgun','dualGun'].includes(w.id)?3.2:1.4);}
-  if(!attack&&!w.ranged&&speed>.2){target.z+=Math.sin(time*12)*(i?-1:1)*.025;}
+  if(!attack&&!w.ranged&&locomotion){target.z+=(locomotion.armSwing||0)*(i?-1:1);}
   if(u?.charging&&!w.ranged&&!attack&&i===0){target.y+=.10;rotation.x-=.6*Math.min(1,u.charge/(w.charge||1));}
   if(i===1&&ref.hasShield)target.set(.28,.43,.14);
   if(u?.guard){if(i===1)target.set(.18,w.id==='knuckle'?.68:.54,.25);else if(!w.ranged){target.set(-.23,w.id==='knuckle'?.68:.51,.21);rotation.x=w.id==='knuckle'?0:.75;}}
@@ -200,16 +201,16 @@ export class ArenaRenderer{
  project(x,y,z){const v=new THREE.Vector3(x,y,z).project(this.camera);return {x:(v.x*.5+.5)*window.innerWidth,y:(-.5*v.y+.5)*window.innerHeight,visible:v.z<1&&v.z>-1&&Math.abs(v.x)<1.1&&Math.abs(v.y)<1.1};}
  orderedTargets(b){return b.enemiesOf(b.human).sort((a,c)=>{const p=this.project(a.x,a.y+.5,a.z),q=this.project(c.x,c.y+.5,c.z);return Math.abs(p.x-window.innerWidth/2)-Math.abs(q.x-window.innerWidth/2)||Math.hypot(a.x-b.human.x,a.z-b.human.z)-Math.hypot(c.x-b.human.x,c.z-b.human.z);});}
  screenTargets(b){return b.enemiesOf(b.human).sort((a,c)=>this.project(a.x,a.y+.5,a.z).x-this.project(c.x,c.y+.5,c.z).x);}
- animateRobot(ref,u,time){
-  const speed=Math.hypot(u.vx,u.vz),stride=Math.sin(time*(u.dashTime>0?28:12));ref.root.position.set(u.x,u.y,u.z);ref.root.rotation.set(0,u.yaw,0);ref.root.visible=true;ref.ring.visible=!u.dead;ref.ring.position.set(0,.015,0);ref.ring.rotation.set(-Math.PI/2,0,0);ref.root.scale.setScalar(u.dead?.65:1);
+ animateRobot(ref,u,time,groundAt=this.groundAt){
+  ref.root.position.set(u.x,u.y,u.z);ref.root.rotation.set(0,u.yaw,0);ref.root.visible=true;ref.ring.visible=!u.dead;ref.ring.position.set(0,.015,0);ref.ring.rotation.set(-Math.PI/2,0,0);ref.root.scale.setScalar(u.dead?.65:1);
   if(ref.active!==u.active){ref.active=u.active;ref.changeWeapons(u.config.sets[u.active]);}
-  const motion=poseWeapons(ref,u,time),canPose=!u.dead&&!(u.down>0||u.rise>0||u.knockdown),attack=u.attack||u.motion;
+  const locomotion=sampleLocomotion(ref,u,time,{groundAt}),motion=poseWeapons(ref,u,time,locomotion),canPose=!u.dead&&!(u.down>0||u.rise>0||u.knockdown),attack=u.attack||u.motion;
   // The visible cutting plane follows the same committed yaw as the hit arc.
   // Turn back toward a moving lock target smoothly during recovery.
   let facing=u.yaw;if(canPose&&motion.sword&&motion.plantYaw!==undefined){const p=attack.elapsed/attack.duration,t=THREE.MathUtils.smoothstep(p,motion.spinYaw!==undefined?.78:.53,1);facing=motion.plantYaw+Math.atan2(Math.sin(u.yaw-motion.plantYaw),Math.cos(u.yaw-motion.plantYaw))*t;}facing+=motion.spinYaw||0;ref.root.rotation.y=facing;
   const reaction=u.knockdown?null:u.hitReaction,reactionWeight=reaction?Math.sin(Math.PI*Math.min(1,reaction.elapsed/reaction.duration)):0,relative=reaction?(reaction.yaw-facing):0,approach=attack?.approach,approachWeight=canPose&&approach?THREE.MathUtils.smoothstep(approach.elapsed,0,.025)*(1-THREE.MathUtils.smoothstep(approach.elapsed,approach.duration-.03,approach.duration))*Math.min(1,approach.travel/.1):0;
-  ref.bodyPivot.rotation.set(u.dead?Math.PI/3:u.knockdown?0:u.down>0?.9:motion.body[0]+(u.dashTime>0?.13:0)+approachWeight*.08+Math.cos(relative)*(reaction?.strength||0)*reactionWeight,canPose?motion.body[1]:0,u.dead?.8:u.status==='stun'?Math.sin(time*30)*.03:canPose?motion.body[2]-Math.sin(relative)*(reaction?.strength||0)*reactionWeight:0);
-  const drop=canPose?motion.drop:0,shift=canPose?motion.shift:[0,0];ref.bodyPivot.position.set(shift[0],.36+drop,shift[1]);ref.legGroup.position.set(shift[0]*.5,motion.sword&&ref.legFrame==='panzer'?0:drop,shift[1]*.6);const hipYaw=canPose&&ref.legFrame!=='panzer'?motion.hipYaw:0;ref.legGroup.rotation.y=hipYaw;
+  ref.bodyPivot.rotation.set(u.dead?Math.PI/3:u.knockdown?0:u.down>0?.9:motion.body[0]+(locomotion?.body[0]??(u.dashTime>0?.13:0))+approachWeight*.08+Math.cos(relative)*(reaction?.strength||0)*reactionWeight,canPose?motion.body[1]+(locomotion?.body[1]||0):0,u.dead?.8:u.status==='stun'?Math.sin(time*30)*.03:canPose?motion.body[2]+(locomotion?.body[2]||0)-Math.sin(relative)*(reaction?.strength||0)*reactionWeight:0);
+  const drop=canPose?motion.drop+(locomotion?.drop||0):0,shift=canPose?motion.shift.map((v,i)=>v+(locomotion?.shift[i]||0)):[0,0];ref.bodyPivot.position.set(shift[0],.36+drop,shift[1]);ref.legGroup.position.set(shift[0]*.5,motion.sword&&ref.legFrame==='panzer'?0:drop,shift[1]*.6);const hipYaw=canPose&&ref.legFrame!=='panzer'?motion.hipYaw:0;ref.legGroup.rotation.y=hipYaw;
   const footTargets=ref.feet.map((leg,i)=>{
    const foot=new THREE.Vector3(...motion.feet[i]);
    if(canPose&&u.grounded&&motion.plantOrigin&&!u.guard){
@@ -220,24 +221,28 @@ export class ArenaRenderer{
    if(approachWeight>0&&u.grounded){const phase=Math.sin(approach.elapsed/approach.duration*Math.PI*2+(i?Math.PI:0));foot.lerp(new THREE.Vector3(leg.userData.side*.105,.035+Math.max(0,phase)*.065,phase*.13),approachWeight);}
    if(!canPose)foot.set(leg.userData.side*.105,.035,.045);
    else if(!u.grounded){foot.y+=.075;foot.z-=.055;}
-   else if(!u.attack&&!u.motion&&speed>.2){const phase=stride*(i?1:-1);foot.z+=phase*.11;foot.y+=Math.max(0,phase)*.06;}
+   else if(locomotion?.feet)foot.set(...locomotion.feet[i]);
+   else if(groundAt&&ref.locomotion.mode==='idle'&&!ref.locomotion.started){const ground=foot.clone().applyAxisAngle(new THREE.Vector3(0,1,0),facing);foot.y=groundAt(u.x+ground.x,u.z+ground.z)+.035-u.y;}
    return foot;
   });
-  if(canPose&&u.grounded&&motion.sword&&ref.legFrame!=='panzer'){
+  if(canPose&&u.grounded&&(motion.sword||locomotion||groundAt&&ref.locomotion.mode==='idle')&&ref.legFrame!=='panzer'){
    // Preserve authored ground contacts: lower the pelvis a little when a raised
    // chest would otherwise exceed the leg's reach and pull a planted foot up.
    let settle=0;for(const [i,leg]of ref.feet.entries()){
     const ankle=footTargets[i].clone().sub(ref.legGroup.position).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw).sub(leg.position),horizontal=ankle.x*ankle.x+ankle.z*ankle.z,vertical=Math.sqrt(Math.max(0,(THIGH+SHIN-.002)**2-horizontal));
     settle=Math.max(settle,-ankle.y-vertical);
-   }settle=Math.min(.10,settle);ref.legGroup.position.y-=settle;ref.bodyPivot.position.y-=settle;
+   }settle=Math.min(locomotion?.15:.10,settle);ref.legGroup.position.y-=settle;ref.bodyPivot.position.y-=settle;
   }
-  for(const [i,leg]of ref.feet.entries())if(leg.knee){const foot=footTargets[i].clone().sub(ref.legGroup.position).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw);poseLeg(leg,foot);leg.foot.rotation.y=(motion.footYaw[i]||0)-hipYaw+(canPose&&u.grounded&&motion.plantOrigin&&!u.guard?(motion.plantYaw??facing)-facing:0);}
+  for(const [i,leg]of ref.feet.entries())if(leg.knee){const foot=footTargets[i].clone().sub(ref.legGroup.position).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw);poseLeg(leg,foot);leg.foot.rotation.set(locomotion?.pitch[i]||0,(locomotion?.footYaw[i]??motion.footYaw[i]??0)-hipYaw+(canPose&&u.grounded&&motion.plantOrigin&&!u.guard?(motion.plantYaw??facing)-facing:0),locomotion?.roll[i]||0);}
   ref.head.rotation.y=canPose?-motion.body[1]*(motion.sword?.75:.28):0;ref.head.rotation.x=canPose?-motion.body[0]*(motion.sword?.65:.20):0;recoveryPose(ref,u);ref.ring.material.opacity=u.buffTime>0?.85:.45;updateTrails(ref,u,time,motion.name);
+  // Start the first step from the weapon's actual idle stance, rather than
+  // snapping its support foot into the locomotion module's neutral stance.
+  if(ref.locomotion.mode==='idle'&&!ref.locomotion.started)for(const [i,leg]of ref.feet.entries())if(leg.foot){const f=ref.locomotion.feet[i],direction=new THREE.Vector3(0,0,1).applyQuaternion(leg.foot.getWorldQuaternion(new THREE.Quaternion()));f.world=leg.foot.getWorldPosition(new THREE.Vector3()).toArray();f.from=[...f.world];f.yaw=Math.atan2(direction.x,direction.z);f.fromYaw=f.yaw;}
  }
 
  event(e){if(!['hit','explosion','dash','buff','kill','spark','special','jump'].includes(e.type))return;const unit=this.robots.get(e.unit);const pos=e.x!==undefined?new THREE.Vector3(e.x,e.y||.05,e.z):unit?unit.root.position.clone():new THREE.Vector3();const color=e.type==='hit'?(e.crit?'#ffd48b':'#96ffe4'):e.type==='explosion'?'#ffae6f':'#67efdb';const radius=e.radius|| (e.type==='special'?.9:e.type==='kill'?.6:.2);const mesh=new THREE.Mesh(new THREE.RingGeometry(radius*.6,radius,24),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.85,side:THREE.DoubleSide}));mesh.position.copy(pos);if(e.type!=='hit')mesh.rotation.x=-Math.PI/2;else mesh.quaternion.copy(this.camera.quaternion);this.effects.add(mesh);this.fx.push({mesh,age:0,duration:e.type==='explosion'?.55:.3,radius});}
  render(b,dt,time){if(this.mode==='hangar'){this.hangarAngle+=dt*.13;if(this.preview){this.preview.root.rotation.y=this.hangarAngle;this.preview.bodyPivot.position.y=.36+Math.sin(time*1.4)*.005;}this.camera.position.lerp(new THREE.Vector3(-.48,1.18,3.1),.05);this.camera.lookAt(-.48,.52,0);}
-  else if(b){for(const u of b.entities)this.animateRobot(this.robots.get(u.id),u,b.time);const observed=b.observed;if(observed){const target=b.targetOf(observed),focus=new THREE.Vector3(observed.x,observed.y+.65,observed.z);let dist=5;if(target){const wanted=Math.atan2(target.x-observed.x,target.z-observed.z)+this.manualYaw;this.cameraYaw+=Math.atan2(Math.sin(wanted-this.cameraYaw),Math.cos(wanted-this.cameraYaw))*Math.min(1,dt*6);focus.x=observed.x*.7+target.x*.3;focus.z=observed.z*.7+target.z*.3;focus.y=Math.max(observed.y,target.y)*.6+.65;dist=THREE.MathUtils.clamp(Math.hypot(target.x-observed.x,target.z-observed.z)*.6+4,5,17);}const desired=new THREE.Vector3(focus.x-Math.sin(this.cameraYaw)*dist,focus.y+dist*(.28+this.cameraPitch),focus.z-Math.cos(this.cameraYaw)*dist);const dir=desired.clone().sub(focus).normalize();this.raycaster.set(focus,dir);this.raycaster.far=desired.distanceTo(focus);const hit=this.raycaster.intersectObjects(this.colliders,false)[0];if(hit)desired.copy(focus).addScaledVector(dir,Math.max(.5,hit.distance-.22));this.camera.position.lerp(desired,1-Math.exp(-dt*7));this.camera.lookAt(focus);}
+  else if(b){for(const u of b.entities)this.animateRobot(this.robots.get(u.id),u,b.time,(x,z)=>b.groundAt(x,z));const observed=b.observed;if(observed){const target=b.targetOf(observed),focus=new THREE.Vector3(observed.x,observed.y+.65,observed.z);let dist=5;if(target){const wanted=Math.atan2(target.x-observed.x,target.z-observed.z)+this.manualYaw;this.cameraYaw+=Math.atan2(Math.sin(wanted-this.cameraYaw),Math.cos(wanted-this.cameraYaw))*Math.min(1,dt*6);focus.x=observed.x*.7+target.x*.3;focus.z=observed.z*.7+target.z*.3;focus.y=Math.max(observed.y,target.y)*.6+.65;dist=THREE.MathUtils.clamp(Math.hypot(target.x-observed.x,target.z-observed.z)*.6+4,5,17);}const desired=new THREE.Vector3(focus.x-Math.sin(this.cameraYaw)*dist,focus.y+dist*(.28+this.cameraPitch),focus.z-Math.cos(this.cameraYaw)*dist);const dir=desired.clone().sub(focus).normalize();this.raycaster.set(focus,dir);this.raycaster.far=desired.distanceTo(focus);const hit=this.raycaster.intersectObjects(this.colliders,false)[0];if(hit)desired.copy(focus).addScaledVector(dir,Math.max(.5,hit.distance-.22));this.camera.position.lerp(desired,1-Math.exp(-dt*7));this.camera.lookAt(focus);}
    const live=new Set();for(const p of b.projectiles){live.add(p.id);let mesh=this.bullets.get(p.id);if(!mesh){const color=p.kind==='missile'||p.kind==='bazooka'?'#ffb979':p.packet.normal?'#92ffdd':'#e7caff';mesh=glow(p.kind==='missile'?.07:.025,p.kind==='missile'?.07:.025,p.kind==='missile'?.18:.16,color);this.world.add(mesh);this.bullets.set(p.id,mesh);}mesh.position.set(p.x,p.y,p.z);mesh.lookAt(p.x+p.vx,p.y+p.vy,p.z+p.vz);}for(const [id,mesh]of this.bullets)if(!live.has(id)){this.world.remove(mesh);this.bullets.delete(id);}}
   for(const f of this.fx){f.age+=dt;const t=f.age/f.duration;f.mesh.material.opacity=Math.max(0,.85*(1-t));f.mesh.scale.setScalar(1+t*1.4);}this.fx=this.fx.filter(f=>{if(f.age<f.duration)return true;this.effects.remove(f.mesh);f.mesh.geometry.dispose();f.mesh.material.dispose();return false;});this.renderer.render(this.scene,this.camera);
  }

@@ -22,6 +22,7 @@ jobs:
       - run: npm test
       - run: npm install --no-save --package-lock=false playwright@1.63.0
       - run: npx playwright install --with-deps chromium
+      - run: node scripts/locomotion-browser.cjs
       - run: node scripts/tension-browser.cjs
       - run: node scripts/browser-smoke.cjs
       - run: node scripts/freeze-browser.cjs
