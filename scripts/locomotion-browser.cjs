@@ -70,7 +70,9 @@ try{
   const b=window.locomotionApp.battle;if(!b.attack(b.human))throw Error('Walking-to-attack fixture failed to attack');return window.locomotionRun({},.10);
  });
  assert(attack.samples.every(s=>s.attack&&s.mode==='pose'),JSON.stringify(attack.samples));await page.screenshot({path:'charge-artifacts/locomotion-walk-to-sword.png'});
- const afterAttack=await page.evaluate(()=>window.locomotionRun({z:1},1));assert(afterAttack.samples.slice(-20).every(s=>s.mode==='walk'));
+ // The preceding boost and authored attack advance bring us near the arena's
+ // north block. Walk back into clear space to test the animation transition.
+ const afterAttack=await page.evaluate(()=>window.locomotionRun({z:-1},1));assert(afterAttack.samples.slice(-20).every(s=>s.mode==='walk'),JSON.stringify(afterAttack.samples.slice(-20)));
  // Check the same real mesh contacts on the other articulated frame geometries.
  const frames=[];for(const frame of ['strider','wild','brawler']){
   const result=await page.evaluate(frame=>{window.locomotionReset(frame);return window.locomotionRun({z:1},1.5);},frame),a=analyze(result.samples);
