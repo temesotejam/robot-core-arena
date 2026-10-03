@@ -1,16 +1,12 @@
 import {meleePose} from './melee-pose.js';
-import {swordArm} from './sword-motion.js';
-import * as THREE from '../vendor/three.module.min.js';
 
 // Original poses. The supplied W episodes 2, 8 and 21 inform the low,
 // asymmetric two-blade silhouette and recovery into the following cut.
-// Those scenes do not establish dagger or boxing technique; the compact
-// dagger work and six punches below are authored separately.
+// Those scenes do not establish dagger technique; the compact dagger work
+// below is authored separately. Knuckle has its own connected motion module.
 const H=(position,rotation=[0,0,0])=>({position,rotation});
 const BLADE_FEET=[[-.105,.035,.085],[.105,.035,-.015]];
-const BOX_FEET=[[-.105,.035,-.015],[.105,.035,.085]];
 const BLADE_POLES=[[-.50,-.55,-.30],[.50,-.55,-.30]];
-const BOX_POLES=[[-.75,-.28,-.12],[.75,-.28,-.12]];
 function blade(r,l,body=[.035,-.15,0],hipYaw=-.06,drop=-.038,shift=[0,0],weight=0,feet=BLADE_FEET){
  return meleePose({right:r,left:l,body,hipYaw,drop,shift,weight,feet,footYaw:[-.08,.06],poles:BLADE_POLES});
 }
@@ -149,97 +145,6 @@ const daggerClips=[
  ]},
 ];
 
-// Keep the rear heel/lead toe roles throughout a boxing combination. A fist
-// that is not striking remains the same local guard pose; the chest carries
-// it, rather than the arm wandering into a second unintended punch.
-const guardRight=H([-.20,.68,.19],[0,0,0]);
-const guardLeft=H([.20,.68,.15],[0,0,0]);
-function box(r,l,body=[.025,-.10,0],hipYaw=-.045,drop=-.026,shift=[0,0],weight=0,rearLift=0,footYaw=[-.05,.05]){
- const options={right:r,left:l,body,hipYaw,drop,shift,weight,feet:BOX_FEET.map((f,i)=>[f[0],f[1]+(i===0?rearLift:0),f[2]]),footYaw,poles:BOX_POLES},frame=meleePose(options),phase=Math.max(0,Math.min(1,(weight-.65)/.30)),amount=phase*phase*(3-2*phase);
- if(!amount)return frame;
- // At the authored contact keys, align the striking face with the connected
- // forearm. A bent elbow supplies the hook/uppercut curve; a folded wrist
- // cannot create it. This runs only when constructing the pose keys.
- const aligned=(hand,joint,guard)=>{
-  if(hand===guard)return hand;
-  const arm=swordArm(joint),direction=arm.wrist.clone().sub(arm.elbow).normalize(),aim=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),direction).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),hand.rotation[2])),orientation=new THREE.Quaternion().setFromEuler(new THREE.Euler(...hand.rotation)).slerp(aim,amount),e=new THREE.Euler().setFromQuaternion(orientation);
-  return H(hand.position,[e.x,e.y,e.z]);
- };
- return meleePose({...options,right:aligned(r,frame.joints.right,guardRight),left:aligned(l,frame.joints.left,guardLeft)});
-}
-const boxReady=box(guardRight,guardLeft);
-// A held charge coils behind the guard. It does not display the extended
-// contact pose of the first jab before the attack has been released.
-const boxHold=box(H([-.215,.695,.135],[.02,-.11,.025]),guardLeft,[.065,-.25,.020],-.17,-.055,[.007,-.010],.65);
-const boxClips=[
- {name:'jabRight',keys:[
-  [0,boxReady],
-  [.04,box(H([-.205,.695,.155],[.02,-.10,.03]),guardLeft,[.015,-.20,.012],-.14,-.032,[.004,-.004],.38)],
-  [.08,box(H([-.21,.700,.145],[.025,-.12,.025]),guardLeft,[.010,-.25,.012],-.035,-.035,[.006,-.007],.65)],
-  [.20,box(H([-.17,.690,.310],[0,-.04,.015]),guardLeft,[.045,-.01,-.005],.18,-.037,[.003,.017],1,.006,[.17,.04])],
-  [.31,box(H([-.16,.690,.375],[0,.06,.015]),guardLeft,[.070,.24,-.018],.26,-.033,[-.004,.024],.94,.008,[.23,.03])],
-  [.41,box(H([-.17,.690,.335],[0,.065,.015]),guardLeft,[.065,.28,-.017],.22,-.030,[-.004,.019],.70,.006,[.18,.03])],
-  [.58,box(H([-.19,.690,.220],[0,.015,.015]),guardLeft,[.035,.14,-.008],.08,-.028,[0,.006],.37,.003,[.06,.04])],
-  [.78,box(guardRight,guardLeft,[.025,-.03,0],-.015,-.026,[0,0],.15)],
-  [1,boxReady],
- ]},
- {name:'jabLeft',keys:[
-  [0,boxReady],
-  [.04,box(guardRight,H([.205,.690,.135],[.015,.08,-.025]),[.015,.15,-.010],.13,-.032,[-.004,-.003],.36)],
-  [.08,box(guardRight,H([.210,.690,.125],[.025,.10,-.03]),[.010,.23,-.014],.025,-.035,[-.006,-.006],.63)],
-  [.20,box(guardRight,H([.175,.685,.305],[0,.025,-.015]),[.040,-.02,.005],-.18,-.038,[-.003,.017],1,.005,[-.07,-.12])],
-  [.31,box(guardRight,H([.160,.685,.370],[0,-.055,-.02]),[.060,-.26,.018],-.26,-.033,[.005,.025],.93,.007,[-.08,-.17])],
-  [.41,box(guardRight,H([.170,.685,.330],[0,-.06,-.02]),[.060,-.29,.020],-.22,-.030,[.004,.018],.69,.005,[-.07,-.13])],
-  [.58,box(guardRight,H([.195,.685,.200],[0,-.012,-.01]),[.035,-.16,.010],-.08,-.028,[0,.005],.36,.002,[-.05,-.03])],
-  [.78,box(guardRight,guardLeft,[.025,-.01,0],-.005,-.026,[0,0],.15)],
-  [1,boxReady],
- ]},
- {name:'bodyRight',keys:[
-  [0,boxReady],
-  [.04,box(H([-.22,.625,.145],[.16,-.10,.035]),guardLeft,[.090,-.23,.020],-.16,-.055,[.007,-.003],.44)],
-  [.08,box(H([-.225,.590,.140],[.19,-.14,.04]),guardLeft,[.135,-.31,.025],-.035,-.071,[.009,-.008],.73)],
-  [.20,box(H([-.175,.535,.295],[.10,-.05,.025]),guardLeft,[.160,-.03,.005],.23,-.081,[.004,.020],1,.006,[.20,.03])],
-  [.31,box(H([-.16,.530,.355],[.08,.06,.02]),guardLeft,[.190,.31,-.022],.33,-.083,[-.007,.032],.97,.008,[.28,.025])],
-  [.41,box(H([-.170,.535,.310],[.10,.06,.025]),guardLeft,[.165,.37,-.025],.28,-.073,[-.006,.023],.71,.007,[.23,.03])],
-  [.58,box(H([-.205,.610,.205],[.09,.01,.025]),guardLeft,[.100,.21,-.013],.11,-.050,[-.002,.007],.37,.003,[.08,.04])],
-  [.78,box(guardRight,guardLeft,[.040,-.015,0],-.01,-.032,[0,0],.15)],
-  [1,boxReady],
- ]},
- {name:'bodyLeft',keys:[
-  [0,boxReady],
-  [.04,box(guardRight,H([.225,.625,.135],[.14,.11,-.035]),[.085,.23,-.020],.16,-.054,[-.007,-.002],.43)],
-  [.08,box(guardRight,H([.225,.585,.135],[.19,.14,-.04]),[.130,.32,-.027],.025,-.072,[-.009,-.007],.75)],
-  [.20,box(guardRight,H([.180,.530,.285],[.11,.04,-.025]),[.155,.015,-.005],-.24,-.082,[-.003,.021],1,.005,[-.07,-.17])],
-  [.31,box(guardRight,H([.170,.525,.350],[.09,-.06,-.02]),[.190,-.33,.024],-.34,-.084,[.007,.032],.97,.007,[-.08,-.23])],
-  [.41,box(guardRight,H([.180,.530,.300],[.10,-.06,-.025]),[.165,-.39,.027],-.28,-.074,[.006,.022],.72,.005,[-.07,-.18])],
-  [.58,box(guardRight,H([.205,.610,.190],[.08,-.01,-.025]),[.095,-.23,.015],-.11,-.050,[.002,.006],.38,.002,[-.055,-.04])],
-  [.78,box(guardRight,guardLeft,[.040,-.02,0],-.01,-.032,[0,0],.15)],
-  [1,boxReady],
- ]},
- {name:'hook',keys:[
-  [0,boxReady],
-  [.04,box(H([-.265,.690,.165],[0,-.20,.12]),guardLeft,[.045,-.30,.020],-.21,-.042,[.008,-.004],.44)],
-  [.08,box(H([-.31,.680,.160],[0,-.28,.20]),guardLeft,[.035,-.43,.030],-.04,-.050,[.012,-.008],.73)],
-  [.20,box(H([-.265,.685,.285],[0,-.09,-.12]),guardLeft,[.075,-.05,.004],.28,-.057,[.005,.021],1,.006,[.23,.025])],
-  [.31,box(H([-.075,.685,.290],[0,.28,-.66]),guardLeft,[.105,.42,-.030],.41,-.054,[-.010,.027],.96,.008,[.33,.03])],
-  [.41,box(H([-.040,.685,.230],[0,.32,-.75]),guardLeft,[.100,.52,-.036],.34,-.047,[-.014,.018],.72,.006,[.27,.035])],
-  [.58,box(H([-.155,.690,.205],[0,.12,-.35]),guardLeft,[.065,.30,-.018],.14,-.035,[-.004,.005],.39,.003,[.10,.04])],
-  [.78,box(guardRight,guardLeft,[.035,.04,-.003],.01,-.028,[0,0],.16)],
-  [1,boxReady],
- ]},
- {name:'uppercut',keys:[
-  [0,boxReady],
-  [.04,box(H([-.230,.575,.175],[.32,-.10,.06]),guardLeft,[.105,-.27,.022],-.17,-.067,[.009,-.005],.47)],
-  [.08,box(H([-.245,.455,.175],[.52,-.15,.10]),guardLeft,[.175,-.36,.030],-.025,-.099,[.012,-.009],.79)],
-  [.20,box(H([-.210,.520,.290],[.32,-.04,.06]),guardLeft,[.095,-.04,.010],.26,-.074,[.006,.021],1,.006,[.21,.025])],
-  [.31,box(H([-.140,.745,.300],[-.27,.10,.025]),guardLeft,[-.065,.29,-.025],.35,-.032,[-.006,.030],.95,.008,[.27,.03])],
-  [.41,box(H([-.150,.785,.260],[-.38,.13,.035]),guardLeft,[-.105,.40,-.030],.28,-.025,[-.007,.019],.71,.006,[.21,.035])],
-  [.58,box(H([-.190,.740,.195],[-.16,.07,.025]),guardLeft,[-.020,.22,-.017],.10,-.029,[-.003,.006],.38,.003,[.07,.04])],
-  [.78,box(guardRight,guardLeft,[.020,.015,-.003],0,-.029,[0,0],.16)],
-  [1,boxReady],
- ]},
-];
-
 const dualOverhead={name:'overhead',keys:[
  [0,dualReady],
  [.11,blade(H([-.265,.745,.10],[-.20,-.10,.32]),H([.27,.690,.13],[.03,.10,-.36]),[-.025,-.18,.018],-.14,-.066,[0,-.010],.55)],
@@ -271,11 +176,7 @@ const daggerContacts=[
  [.12,.180,.26],[.27,.330,.41],[.25,.320,.43],
  [.26,.315,.39],[.12,.170,.25],
 ];
-const boxContacts=[
- [.16,.300,.38],[.16,.300,.38],[.18,.290,.39],
- [.18,.290,.39],[.22,.310,.41],[.20,.290,.39],
-];
-for(const [clips,contacts]of [[dualClips,dualContacts],[daggerClips,daggerContacts],[boxClips,boxContacts]])
+for(const [clips,contacts]of [[dualClips,dualContacts],[daggerClips,daggerContacts]])
  clips.forEach((clip,i)=>{const [start,center,end]=contacts[i];clip.contact={start,center,end};});
 dualOverhead.contact={start:.29,center:.39,end:.52};
 daggerOverhead.contact={start:.29,center:.37,end:.45};
@@ -290,5 +191,4 @@ function shielded(f){
 export const FAST_MOTIONS={
  dualSword:{ready:dualReady,clips:dualClips,charged:dualOverhead},
  dagger:{ready:daggerReady,shieldReady:shielded(daggerReady),clips:daggerClips.map(c=>({...c,shieldKeys:c.keys.map(([p,f])=>[p,shielded(f)])})),charged:{...daggerOverhead,shieldKeys:daggerOverhead.keys.map(([p,f])=>[p,shielded(f)])}},
- knuckle:{ready:boxReady,hold:boxHold,clips:boxClips},
 };

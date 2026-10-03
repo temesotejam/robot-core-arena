@@ -3,6 +3,7 @@ import {FRAMES,WEAPONS} from './data.js';
 import {KNOCKDOWN,nextCombo} from './combat.js';
 import {sampleMotion,readyPose,motionRhythm,stepPhase} from './motion.js';
 import {swordArm} from './sword-motion.js';
+import {presentKnuckle} from './knuckle-motion.js';
 import {sampleLocomotion} from './locomotion.js';
 import {sampleLanding} from './landing-motion.js';
 const mats=new Map(),boxes=new Map(),armorGeometries=new Map(),plateGeometries=new Map();
@@ -147,14 +148,17 @@ function recoveryPose(ref,u){
 }
 // Both the hangar and battle use these poses; attachments never need to cancel a shoulder rotation.
 function poseWeapons(ref,u=null,time=0,locomotion=null,landing=null){
- const w=WEAPONS[ref.kind],speed=u?Math.hypot(u.vx,u.vz):0,attack=u?.attack||(u?.motion?.weapon===w.id&&!w.ranged&&(!u.charging||u.motion.elapsed<u.motion.duration)?u.motion:null),motion=sampleMotion(w.id,attack,{nextCombo:u?.queuedAttack?nextCombo(u,u.queuedAttack.charge,w):null,charging:u?.charging?u.chargePose:null,hasShield:!!ref.hasShield}),dual=['dualSword','dualGun','knuckle'].includes(w.id);
+ const w=WEAPONS[ref.kind],speed=u?Math.hypot(u.vx,u.vz):0,attack=u?.attack||(u?.motion?.weapon===w.id&&!w.ranged&&(!u.charging||u.motion.elapsed<u.motion.duration)?u.motion:null),dual=['dualSword','dualGun','knuckle'].includes(w.id);
+ let motion=sampleMotion(w.id,attack,{nextCombo:u?.queuedAttack?nextCombo(u,u.queuedAttack.charge,w):null,charging:u?.charging?u.chargePose:null,hasShield:!!ref.hasShield});
+ if(w.id==='knuckle')motion=presentKnuckle(ref,motion,{time,mode:attack||(u?.charging?'hold':null),enabled:!!u&&!u.dead&&!(u.down>0||u.rise>0||u.knockdown||u.statusTime>0||u.stun>0||u.guardBreak>0)});
+ else delete ref.knucklePresentation;
  const shot=u?.motion?.weapon===w.id&&w.ranged?u.motion:null,shotProgress=shot?THREE.MathUtils.clamp(shot.elapsed/shot.duration,0,1):0;
  const kick=kind=>({machinegun:.012,assault:.015,dualGun:.020,pistol:.028,shotgun:.035,rifle:.038,sniper:.050,heavyShotgun:.045,bazooka:.052,missile:.030})[kind]||.022;
  const pulse=p=>{if(p<=0||p>=1)return 0;const t=p<.24?p/.24:1-(p-.24)/.76;return t*t*(3-2*t);},recoil=shot?pulse(shotProgress)*kick(w.id):0;
  for(const weapon of ref.weaponAttachments)if(weapon.userData.flash)weapon.userData.flash.visible=!!shot&&shotProgress<.3&&!u.dead&&!u.guard;
  for(const [i,arm]of ref.arms.entries()){
-  if(motion.joints&&!u?.guard&&(!u?.charging||attack||motion.name==='chargeHold')&&!u?.dead&&!(u?.down>0)){
-   let joint=walkingJoint(motion.joints[i?'left':'right'],!attack&&!u?.charging?locomotion?.arms?.[i]:null);
+  if(motion.joints&&(!u?.guard||w.id==='knuckle')&&(!u?.charging||attack||motion.name==='chargeHold')&&!u?.dead&&!(u?.down>0)){
+   let joint=walkingJoint(motion.joints[i?'left':'right'],!attack&&!u?.charging&&!u?.guard?locomotion?.arms?.[i]:null);
    if(i===1&&ref.hasShield&&landing?.guard)joint=walkingJoint(joint,{rotation:[-.24*landing.guard,-.08*landing.guard,-.06*landing.guard],bend:.20*landing.guard,clavicle:[0,0,0]});
    poseSwordArm(arm,joint);continue;
   }
@@ -171,11 +175,11 @@ function poseWeapons(ref,u=null,time=0,locomotion=null,landing=null){
  if(shot){motion.body[0]-=recoil*2;motion.drop=-recoil*.25;motion.shift[1]-=recoil*.6;}
  return motion;
 }
-function updateTrails(ref,u,time,motionName){
+function updateTrails(ref,u,time,motionName,strikingSide){
  const attack=u.attack||u.motion,active=!u.dead&&u.down<=0&&!u.guard&&!!attack&&(!attack.weapon||attack.weapon===ref.kind);
  ref.root.updateMatrixWorld(true);
  for(const trail of ref.weaponTrails||[]){const p=attack?attack.elapsed/attack.duration:0,rhythm=motionRhythm(ref.kind,attack||{}),left=trail.weapon.parent===ref.arms[1].hand;
-  const striking=ref.kind==='knuckle'?left===['jabLeft','bodyLeft'].includes(motionName):ref.kind==='dualSword'&&['rightCut','leftReturn','rightDiagonal','leftDiagonal'].includes(motionName)?left===['leftReturn','leftDiagonal'].includes(motionName):true;
+  const striking=ref.kind==='knuckle'?left===(strikingSide?strikingSide==='left':['jabLeft','bodyLeft'].includes(motionName)):ref.kind==='dualSword'&&['rightCut','leftReturn','rightDiagonal','leftDiagonal'].includes(motionName)?left===['leftReturn','leftDiagonal'].includes(motionName):true;
   if(active&&striking&&p>=rhythm.windup&&p<=rhythm.contactEnd+.08&&trail.samples.at(-1)?.time!==time){const world=ref.kind==='sword'&&attack.charge>0&&!attack.skill,tip=trail.weapon.localToWorld(new THREE.Vector3(...trail.weapon.userData.trailTip)),base=trail.weapon.localToWorld(new THREE.Vector3(...trail.weapon.userData.trailBase));if(!world){ref.root.worldToLocal(tip);ref.root.worldToLocal(base);}trail.samples.push({tip,base,time,world});}
   trail.samples=trail.samples.filter(s=>time-s.time<.12).slice(-12);const vertices=trail.mesh.geometry.attributes.position.array;let offset=0;
   for(let i=1;i<trail.samples.length;i++){const a=trail.samples[i-1],b=trail.samples[i],point=(s,key)=>s.world?ref.root.worldToLocal(s[key].clone()):s[key],ab=point(a,'base'),at=point(a,'tip'),bb=point(b,'base'),bt=point(b,'tip');for(const v of [ab,at,bt,ab,bt,bb]){vertices[offset++]=v.x;vertices[offset++]=v.y;vertices[offset++]=v.z;}}
@@ -284,7 +288,7 @@ export class ArenaRenderer{
   }
   for(const [i,leg]of ref.feet.entries())if(leg.knee){const foot=footTargets[i].clone().sub(ref.legGroup.position).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw);poseLeg(leg,foot);leg.foot.rotation.set(locomotion?.pitch[i]||0,(locomotion?.footYaw[i]??motion.footYaw[i]??0)-hipYaw+(canPose&&u.grounded&&motion.plantOrigin&&!u.guard?(motion.plantYaw??facing)-facing:0),locomotion?.roll[i]||0);}
   const head=motion.head||[-motion.body[0]*(motion.sword?.65:.20),-motion.body[1]*(motion.sword?.75:.28),0];
-  ref.head.rotation.set(canPose?head[0]-(locomotion?.body[0]||0)*.65+(landing?.head[0]||0):0,canPose?head[1]-(locomotion?.body[1]||0)*.9:0,canPose?head[2]-(locomotion?.body[2]||0)*.7+(landing?.head[2]||0):0);recoveryPose(ref,u);ref.ring.material.opacity=u.buffTime>0?.85:.45;updateTrails(ref,u,time,motion.name);
+  ref.head.rotation.set(canPose?head[0]-(locomotion?.body[0]||0)*.65+(landing?.head[0]||0):0,canPose?head[1]-(locomotion?.body[1]||0)*.9:0,canPose?head[2]-(locomotion?.body[2]||0)*.7+(landing?.head[2]||0):0);recoveryPose(ref,u);ref.ring.material.opacity=u.buffTime>0?.85:.45;updateTrails(ref,u,time,motion.name,motion.strikingSide);
   // Start the first step from the weapon's actual idle stance, rather than
   // snapping its support foot into the locomotion module's neutral stance.
   if(ref.locomotion.mode==='idle'&&!ref.locomotion.started)for(const [i,leg]of ref.feet.entries())if(leg.foot){const f=ref.locomotion.feet[i],direction=new THREE.Vector3(0,0,1).applyQuaternion(leg.foot.getWorldQuaternion(new THREE.Quaternion()));f.world=leg.foot.getWorldPosition(new THREE.Vector3()).toArray();f.from=[...f.world];f.yaw=Math.atan2(direction.x,direction.z);f.fromYaw=f.yaw;}
