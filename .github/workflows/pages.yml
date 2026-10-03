@@ -27,6 +27,11 @@ jobs:
         with:
           name: locomotion-review
           path: charge-artifacts/locomotion-*
+      - run: node scripts/charge-browser.cjs --sword-review
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sword-motion-review
+          path: charge-artifacts/sword-motion-*
       - run: node scripts/tension-browser.cjs
       - run: node scripts/browser-smoke.cjs
       - run: node scripts/freeze-browser.cjs

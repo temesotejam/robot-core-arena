@@ -76,6 +76,26 @@ function walkingJoint(joint,gait){
  const upper=new THREE.Quaternion().setFromEuler(new THREE.Euler(...gait.rotation)).multiply(new THREE.Quaternion().fromArray(joint.upper));
  return {...joint,upper:upper.toArray(),bend:joint.bend+gait.bend,clavicle:joint.clavicle.map((v,i)=>v+gait.clavicle[i])};
 }
+function swordContacts(ref,u,motion,attack,feet,facing,transported){
+ if(!u.grounded||!motion.sword||!motion.plantOrigin||u.guard||transported||ref.legFrame==='panzer'){
+  delete ref.swordPlant;return;
+ }
+ const phase=Math.min(1,attack.elapsed/attack.duration),origin=motion.plantOrigin,
+  signature=[attack.weapon,attack.combo||0,attack.charge||0,attack.duration,motion.plantYaw].join('/'),previous=ref.swordPlant;
+ const reset=!previous||previous.signature!==signature||phase<previous.phase-1e-9||
+  attack.id&&previous.id&&attack.id!==previous.id||
+  origin.some((v,i)=>Math.abs(v-previous.origin[i])>1e-7)||
+  Math.hypot(u.x-previous.root[0],u.y-previous.root[1],u.z-previous.root[2])>.65;
+ const state=reset?{signature,id:attack.id,origin:[...origin],feet:[null,null]}:previous,root=new THREE.Vector3(u.x,u.y,u.z),axis=new THREE.Vector3(0,1,0);
+ // Collision-limited travel can stop and resume after the target is launched.
+ // Estimate the goal only during the swing; keep the world landing thereafter.
+ for(const [i,foot]of feet.entries()){
+  if(motion.feet[i][1]>.035+1e-9){state.feet[i]=null;continue;}
+  state.feet[i]??=foot.clone().applyAxisAngle(axis,facing).add(root);
+  foot.copy(state.feet[i]).sub(root).applyAxisAngle(axis,-facing);
+ }
+ state.phase=phase;state.root=root.toArray();ref.swordPlant=state;
+}
 const THIGH=.155,SHIN=.17;
 function poseLeg(leg,target){
  const ankle=target.clone().sub(leg.position),distance=Math.min(ankle.length(),THIGH+SHIN-.001);ankle.setLength(distance);
@@ -217,7 +237,7 @@ export class ArenaRenderer{
   let facing=u.yaw;if(canPose&&motion.sword&&motion.plantYaw!==undefined){const p=attack.elapsed/attack.duration,t=THREE.MathUtils.smoothstep(p,motion.spinYaw!==undefined?.78:.53,1);facing=motion.plantYaw+Math.atan2(Math.sin(u.yaw-motion.plantYaw),Math.cos(u.yaw-motion.plantYaw))*t;}facing+=motion.spinYaw||0;ref.root.rotation.y=facing;
   const reaction=u.knockdown?null:u.hitReaction,reactionWeight=reaction?Math.sin(Math.PI*Math.min(1,reaction.elapsed/reaction.duration)):0,relative=reaction?(reaction.yaw-facing):0,approach=attack?.approach,approachWeight=canPose&&approach?THREE.MathUtils.smoothstep(approach.elapsed,0,.025)*(1-THREE.MathUtils.smoothstep(approach.elapsed,approach.duration-.03,approach.duration))*Math.min(1,approach.travel/.1):0;
   ref.bodyPivot.rotation.set(u.dead?Math.PI/3:u.knockdown?0:u.down>0?.9:motion.body[0]+(locomotion?.body[0]??(u.dashTime>0?.13:0))+approachWeight*.08+Math.cos(relative)*(reaction?.strength||0)*reactionWeight,canPose?motion.body[1]+(locomotion?.body[1]||0):0,u.dead?.8:u.status==='stun'?Math.sin(time*30)*.03:canPose?motion.body[2]+(locomotion?.body[2]||0)-Math.sin(relative)*(reaction?.strength||0)*reactionWeight:0);
-  const drop=canPose?motion.drop+(locomotion?.drop||0):0,shift=canPose?motion.shift.map((v,i)=>v+(locomotion?.shift[i]||0)):[0,0];ref.bodyPivot.position.set(shift[0],.36+drop,shift[1]);ref.legGroup.position.set(shift[0]*.5,motion.sword&&ref.legFrame==='panzer'?0:drop,shift[1]*.6);const hipYaw=canPose&&ref.legFrame!=='panzer'?(locomotion?.hipYaw??motion.hipYaw):0;ref.legGroup.rotation.y=hipYaw;
+  const drop=canPose?motion.drop+(locomotion?.drop||0):0,shift=canPose?motion.shift.map((v,i)=>v+(locomotion?.shift[i]||0)):[0,0],tracks=motion.sword&&ref.legFrame==='panzer';ref.bodyPivot.position.set(shift[0],.36+drop,shift[1]);ref.legGroup.position.set(tracks?0:shift[0]*.5,tracks?0:drop,tracks?0:shift[1]*.6);const hipYaw=canPose&&ref.legFrame!=='panzer'?(locomotion?.hipYaw??motion.hipYaw):0;ref.legGroup.rotation.y=hipYaw;
   const footTargets=ref.feet.map((leg,i)=>{
    const foot=new THREE.Vector3(...motion.feet[i]);
    if(canPose&&u.grounded&&motion.plantOrigin&&!u.guard){
@@ -232,6 +252,8 @@ export class ArenaRenderer{
    else if(groundAt&&ref.locomotion.mode==='idle'&&!ref.locomotion.started){const ground=foot.clone().applyAxisAngle(new THREE.Vector3(0,1,0),facing);foot.y=groundAt(u.x+ground.x,u.z+ground.z)+.035-u.y;}
    return foot;
   });
+  if(canPose)swordContacts(ref,u,motion,attack,footTargets,facing,approach?.active||approachWeight>0);
+  else delete ref.swordPlant;
   if(canPose&&u.grounded&&(motion.sword||locomotion||groundAt&&ref.locomotion.mode==='idle')&&ref.legFrame!=='panzer'){
    // Preserve authored ground contacts: lower the pelvis a little when a raised
    // chest would otherwise exceed the leg's reach and pull a planted foot up.

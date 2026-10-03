@@ -2,11 +2,83 @@ const {chromium}=require('playwright');
 const {spawn}=require('node:child_process');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
+// Fast, early visual evidence for attack changes. All five attacks originate
+// from normal held/released input in the actual application's fixed-step loop.
+// The snapshots retain real Battle states; they never synthesize combo hits.
+async function swordReview(browser,errors){
+ const reports=[];
+ for(const view of ['side','threequarter']){
+  const page=await browser.newPage({viewport:{width:1100,height:800},recordVideo:{dir:'charge-artifacts',size:{width:1100,height:800}}});page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('http://127.0.0.1:4173');await page.locator('.home-copy').waitFor();
+  await page.evaluate(async view=>{
+   const [{app},{defaultConfig},THREE,{sampleMotion}]=await Promise.all([import('/src/main.js'),import('/src/customize.js'),import('/vendor/three.module.min.js'),import('/src/motion.js')]);
+   window.swordReviewApp=app;const c=defaultConfig();c.passives=[];c.abilities=[];c.sets=[0,1].map(()=>({item:'weapon:sword',shield:'shield:basic',separate:false}));app.state.units[0]=c;app.state.enemies[0]=defaultConfig(0,true);app.state.enemies[0].abilities=[];
+   Object.assign(app.state.setup,{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true});app.startBattle();const b=app.battle;b.countdown=0;b.paused=true;b.training.freezeAI=true;b.rng=()=>.99;
+   if(b.training.infinite)throw Error('Sword review must use finite resources');const [u,v]=b.entities;Object.assign(u,{x:3,z:0,yaw:0,target:v.id});Object.assign(v,{x:3,z:.9,yaw:Math.PI});
+   const cameras={side:{position:[7.2,1.35,.65],target:[3,.48,.65]},threequarter:{position:[5.8,1.4,3.4],target:[3,.48,.60]},front:{position:[3,1.4,4.8],target:[3,.48,.60]}};
+   window.swordReviewCamera=cameras[view];const draw=app.renderer.renderer.render.bind(app.renderer.renderer);app.renderer.renderer.render=(scene,camera)=>{const c=window.swordReviewCamera;camera.position.set(...c.position);camera.lookAt(...c.target);camera.updateMatrixWorld(true);draw(scene,camera);};app.renderer.render(b,1/60,b.time);
+   window.swordReviewData={samples:[],starts:[],hits:[],snapshots:{},done:false};const data=window.swordReviewData,seen=new Set(),anchors=[null,null];let pressing=false,charging=false,previous=-1,maxContactDrift=0;
+   const snapshot=(key,caption)=>{if(!data.snapshots[key]){const rig=[u,v].map(unit=>{const ref=app.renderer.robots.get(unit.id),plant=ref.swordPlant;return {locomotion:structuredClone(ref.locomotion),swordPlant:plant?{...structuredClone(plant),feet:plant.feet.map(f=>f?f.toArray():null)}:null};});data.snapshots[key]={unit:structuredClone(u),target:structuredClone(v),rig,time:b.time,caption};}};
+   const capture=()=>{
+    const ref=app.renderer.robots.get(u.id);app.renderer.animateRobot(ref,u,b.time,(x,z)=>b.groundAt(x,z));ref.root.updateMatrixWorld(true);const a=u.attack,motion=sampleMotion('sword',a),p=a?a.elapsed/a.duration:null;
+    const position=o=>o.getWorldPosition(new THREE.Vector3()),local=o=>ref.root.worldToLocal(position(o)).toArray(),feet=ref.feet.map((leg,i)=>{const point=position(leg.foot),bounds=new THREE.Box3().setFromObject(leg.foot),support=!!a&&motion.feet[i][1]<=.035+1e-9;
+     if(support){if(anchors[i]?.id===a.id)maxContactDrift=Math.max(maxContactDrift,point.distanceTo(anchors[i].point));else anchors[i]={id:a.id,point:point.clone()};}else anchors[i]=null;
+     if(bounds.min.y<-.002)throw Error(`Sword review foot enters ground: ${bounds.min.y}`);return {position:point.toArray(),support,screen:app.renderer.project(point.x,point.y,point.z)};
+    });
+    for(const arm of ref.arms){if(arm.upper.localToWorld(new THREE.Vector3(0,-.195,0)).distanceTo(position(arm.elbow))>1e-7||arm.lower.localToWorld(new THREE.Vector3(0,-.195,0)).distanceTo(position(arm.hand))>1e-7)throw Error('Sword review arm joint disconnects');}
+    const weapon=ref.weaponAttachments[0],tip=weapon.localToWorld(new THREE.Vector3(...weapon.userData.trailTip));if(position(weapon).distanceTo(position(ref.arms[0].hand))>1e-7)throw Error('Sword review blade leaves its hand');
+    const headBounds=new THREE.Box3().setFromObject(ref.head),headScreens=[];for(const x of [headBounds.min.x,headBounds.max.x])for(const y of [headBounds.min.y,headBounds.max.y])for(const z of [headBounds.min.z,headBounds.max.z])headScreens.push(app.renderer.project(x,y,z));
+    data.samples.push({time:b.time,id:a?.id,combo:a?.combo,charge:a?.charge,p,x:u.x,z:u.z,facing:ref.root.rotation.y,body:ref.bodyPivot.rotation.toArray().slice(0,3),pelvis:ref.bodyPivot.position.toArray(),hipYaw:ref.legGroup.rotation.y,spinYaw:motion.spinYaw||0,head:local(ref.head),headScreens,elbows:ref.arms.map(arm=>local(arm.elbow)),hands:ref.arms.map(arm=>local(arm.hand)),feet,tip:tip.toArray(),tipScreen:app.renderer.project(tip.x,tip.y,tip.z),topScreen:app.renderer.project(u.x,u.y+1.16,u.z)});
+    if(a){for(const phase of a.charge>0?[.20,.50,.78]:[.16,.40,.53])if(p>=phase){const key=a.charge>0?`charge-${Math.round(phase*100)}`:`cut-${a.combo}-${Math.round(phase*100)}`;snapshot(key,a.charge>0?`最大チャージ・回転薙ぎ払い ${Math.round(phase*100)}%`:`${a.combo+1}段目 ${Math.round(phase*100)}%`);}}
+    else if(u.charging){const amount=u.charge/b.maxCharge(u);if(amount>=.5)snapshot('charge-hold-half','チャージ50%');if(amount>=1-1e-9)snapshot('charge-hold-full','最大チャージ');}
+   };
+   const attack=b.attack.bind(b);b.attack=(unit,amount=0,input={})=>{const ok=attack(unit,amount,input);if(ok&&unit===u)data.starts.push({id:u.attack.id,combo:u.attack.combo,charge:u.attack.charge,at:b.time,tension:u.tension});return ok;};
+   const tick=b.tick.bind(b);b.tick=dt=>{
+    if(b.paused)return;const rt=b.runtime(u),normals=data.starts.filter(a=>a.charge===0),charged=data.starts.some(a=>a.charge>0);let input={x:0,z:0};
+    if(normals.length<4){const first=!normals.length&&!u.attack&&!u.motion,follow=u.attack&&u.attack.combo<3&&u.comboHit&&!u.queuedAttack&&rt.cooldown<=.15&&rt.cooldown>0;
+     if(pressing)pressing=false;else if(first||follow){input.attack=true;pressing=true;}
+    }else if(!charged){if(!charging&&!u.attack&&(!u.motion||u.motion.elapsed>=u.motion.duration)&&rt.cooldown===0&&!b.invulnerable(v)){charging=true;}
+     if(charging)input.attack=u.charge<b.maxCharge(u)-1e-9;
+    }
+    tick(dt,input);for(const e of b.events)if(e.type==='hit'&&e.attacker===u.id&&!seen.has(e)){seen.add(e);data.hits.push({time:b.time,id:u.attack?.id,combo:u.attack?.combo,charge:u.attack?.charge,damage:e.damage});}
+    if(previous!==b.time){capture();previous=b.time;}
+    if(charged&&!u.attack&&!u.motion){b.paused=true;data.done=true;data.damage=u.dealt;data.tension=u.tension;data.maxContactDrift=maxContactDrift;}
+    if(b.time>9&&!data.done)throw Error('Sword review did not complete all real attacks');
+   };
+   const update=app.hudUpdate.bind(app);app.hudUpdate=()=>{update();const footer=app.hud.querySelector('.hud-footer>span');if(footer)footer.textContent=`4段コンボ → 最大チャージ回転斬り · SIM ${b.time.toFixed(2)} s`;};b.paused=false;
+  },view);
+  await page.waitForFunction(()=>window.swordReviewData.done,{},{timeout:60000});
+  const result=await page.evaluate(()=>({...window.swordReviewData,snapshots:Object.keys(window.swordReviewData.snapshots),fault:window.swordReviewApp.frameError?String(window.swordReviewApp.frameError.error||window.swordReviewApp.frameError):null,lost:!!window.swordReviewApp.renderer.contextLost,calls:window.swordReviewApp.renderer.renderer.info.render.calls,infinite:window.swordReviewApp.battle.training.infinite}));
+  assert.equal(result.fault,null);assert.equal(result.lost,false);assert.equal(result.infinite,false);assert(result.calls>0);assert.deepEqual(result.starts.filter(a=>!a.charge).map(a=>a.combo),[0,1,2,3]);assert.equal(result.starts.filter(a=>a.charge===1).length,1);assert.equal(result.hits.length,5);assert(result.hits.every(h=>h.damage>0));assert(result.maxContactDrift<.001,JSON.stringify({view,drift:result.maxContactDrift}));assert(result.samples.length>200);
+  for(const s of result.samples){for(const point of [...s.feet.map(f=>f.screen),...s.headScreens,s.topScreen,s.tipScreen])assert(point.visible&&point.x>8&&point.x<1092&&point.y>85&&point.y<705,JSON.stringify({view,time:s.time,combo:s.combo,p:s.p,point}));}
+  const chargedSamples=result.samples.filter(s=>s.charge===1),chargedTurn=Math.max(...chargedSamples.map(s=>s.facing))-Math.min(...chargedSamples.map(s=>s.facing));assert(chargedSamples.length>30);assert(chargedTurn>=Math.PI*2-1e-8);for(let i=1;i<chargedSamples.length;i++)assert(chargedSamples[i].facing>=chargedSamples[i-1].facing-1e-8,'the rendered charged turn reverses');
+  const poses=[];for(let combo=0;combo<4;combo++){const samples=result.samples.filter(s=>s.charge===0&&s.combo===combo),range=read=>{const vals=samples.map(read);return Math.max(...vals)-Math.min(...vals);};assert(samples.length>20);const pose={combo,chestPitch:range(s=>s.body[0]),chestYaw:range(s=>s.body[1]),pelvisHeight:range(s=>s.pelvis[1]),hipYaw:range(s=>s.hipYaw),freeElbow:Math.hypot(...[0,1,2].map(axis=>range(s=>s.elbows[1][axis])))};assert(pose.hipYaw>.30&&pose.freeElbow>.07,JSON.stringify(pose));poses.push(pose);}
+  const savedStates=view==='threequarter'?await page.evaluate(()=>JSON.stringify(window.swordReviewData.snapshots)):null;
+  await page.screenshot({path:`charge-artifacts/sword-motion-${view}-recovered.png`});const video=page.video();await page.close();await video.saveAs(`charge-artifacts/sword-motion-${view}-gameplay.webm`);
+  reports.push({view,starts:result.starts,hits:result.hits,damage:result.damage,tension:result.tension,maxContactDrift:result.maxContactDrift,chargedTurn,poses,snapshots:result.snapshots});
+  // Replay the recorded states on the same renderer in a separate paused page,
+  // so still photographs do not introduce artificial holds into either movie.
+  if(savedStates){
+   const still=await browser.newPage({viewport:{width:1100,height:800}});still.on('pageerror',e=>errors.push(e.message));await still.goto('http://127.0.0.1:4173');await still.locator('.home-copy').waitFor();
+   await still.evaluate(async savedStates=>{
+    const [{app},THREE]=await Promise.all([import('/src/main.js'),import('/vendor/three.module.min.js')]),states=JSON.parse(savedStates),first=Object.values(states)[0];app.state.units[0]=first.unit.config;app.state.enemies[0]=first.target.config;Object.assign(app.state.setup,{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true});app.startBattle();const b=app.battle;b.paused=true;b.countdown=0;app.view='inspection';app.renderer.mode='inspection';
+    const cameras={side:{position:[7.2,1.35,.65],target:[3,.48,.65]},threequarter:{position:[5.8,1.4,3.4],target:[3,.48,.60]},front:{position:[3,1.4,4.8],target:[3,.48,.60]}},draw=app.renderer.renderer.render.bind(app.renderer.renderer);window.swordStillCamera=cameras.threequarter;app.renderer.renderer.render=(scene,camera)=>{const c=window.swordStillCamera;camera.position.set(...c.position);camera.lookAt(...c.target);camera.updateMatrixWorld(true);draw(scene,camera);};
+    window.swordReviewDrawSaved=(key,camera)=>{const s=states[key];if(!s)throw Error(`Missing gameplay state ${key}`);window.swordStillCamera=cameras[camera];const refs=[app.renderer.robots.get(b.human.id),app.renderer.robots.get(b.entities[1].id)];for(const [i,unit]of [s.unit,s.target].entries()){const state=s.rig[i];refs[i].locomotion=structuredClone(state.locomotion);if(state.swordPlant)refs[i].swordPlant={...structuredClone(state.swordPlant),feet:state.swordPlant.feet.map(f=>f?new THREE.Vector3(...f):null)};else delete refs[i].swordPlant;app.renderer.animateRobot(refs[i],unit,s.time,(x,z)=>b.groundAt(x,z));}app.renderer.renderer.render(app.renderer.scene,app.renderer.camera);
+     const points=[];for(const ref of refs){for(const leg of ref.feet)points.push(leg.foot.getWorldPosition(new THREE.Vector3()));const headBounds=new THREE.Box3().setFromObject(ref.head);for(const x of [headBounds.min.x,headBounds.max.x])for(const y of [headBounds.min.y,headBounds.max.y])for(const z of [headBounds.min.z,headBounds.max.z])points.push(new THREE.Vector3(x,y,z));}points.push(refs[0].weaponAttachments[0].localToWorld(new THREE.Vector3(...refs[0].weaponAttachments[0].userData.trailTip)),new THREE.Vector3(s.unit.x,s.unit.y+1.16,s.unit.z));for(const point of points){const p=app.renderer.project(point.x,point.y,point.z);if(!p.visible||p.x<=8||p.x>=1092||p.y<=85||p.y>=705)throw Error(`Saved sword frame cropped: ${camera}/${key} ${JSON.stringify(p)}`);}const footer=app.hud.querySelector('.hud-footer>span');if(footer)footer.textContent=`実戦の保存フレーム · ${s.caption} · SIM ${s.time.toFixed(2)} s`;
+    };
+   },savedStates);
+   for(const camera of ['front','side','threequarter'])for(const key of result.snapshots){await still.evaluate(({key,camera})=>window.swordReviewDrawSaved(key,camera),{key,camera});await still.screenshot({path:`charge-artifacts/sword-motion-${camera}-${key}.png`});}
+   await still.close();
+  }
+ }
+ assert.deepEqual(errors,[]);console.log('Sword motion early review passed: finite-resource actual application loop, four genuinely hit-gated cuts and a full charged sweep, planted feet, connected arms and blade grip, all body/feet/blade bounds, fixed side and three-quarter videos. '+JSON.stringify(reports));
+}
 (async()=>{const server=spawn(process.execPath,['scripts/serve.mjs'],{stdio:'inherit'});let browser;
 try{
  for(let i=0;i<100;i++){try{if((await fetch('http://127.0.0.1:4173')).ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
  browser=await chromium.launch({headless:true,args:['--no-sandbox','--enable-unsafe-swiftshader']});
  fs.mkdirSync('charge-artifacts',{recursive:true});const errors=[];
+ if(process.argv.includes('--sword-review')){await swordReview(browser,errors);return;}
  const page=await browser.newPage({viewport:{width:1100,height:800},recordVideo:{dir:'charge-artifacts',size:{width:1100,height:800}}});page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:4173/sword-motion.html?mode=charge');await page.locator('#pose').waitFor();await page.evaluate(async()=>{window.chargeViewer=(await import('/src/sword-preview.js')).swordPreview;});
  assert.equal(await page.locator('[data-stage="4"]').getAttribute('aria-pressed'),'true');assert(await page.locator('#charge-controls').isVisible());
