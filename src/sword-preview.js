@@ -42,7 +42,7 @@ function draw(){
  // The fixed, translucent training target makes blade entry visible. The
  // camera frames both robots; the stationary floor and shadows make
  // grounded feet and any sliding visible, rather than hiding root movement.
- const mobile=innerWidth<600,charged=selected===4,wide=charged||approachMode,height=wide?.30:mobile?.42:.64,zoom=distance*(wide?(mobile?(approachMode?2.25:1.95):1.20):mobile?1.30:1),focusZ=withTarget&&(!charged||approachMode)?(u.z+.9)/2:u.z;renderer.camera.position.set(u.x+Math.sin(yaw)*Math.cos(pitch)*zoom,u.y+height+Math.sin(pitch)*zoom,focusZ+Math.cos(yaw)*Math.cos(pitch)*zoom);renderer.camera.lookAt(u.x,u.y+height,focusZ);renderer.renderer.render(renderer.scene,renderer.camera);
+ const mobile=innerWidth<600,charged=selected===4,wide=charged||approachMode,height=wide?.30:mobile?.42:.64,zoom=distance*(wide?(mobile?(approachMode?2.8:1.95):1.20):mobile?1.30:1),focusZ=withTarget&&(!charged||approachMode)?(u.z+.9)/2:u.z;renderer.camera.position.set(u.x+Math.sin(yaw)*Math.cos(pitch)*zoom,u.y+height+Math.sin(pitch)*zoom,focusZ+Math.cos(yaw)*Math.cos(pitch)*zoom);renderer.camera.lookAt(u.x,u.y+height,focusZ);renderer.renderer.render(renderer.scene,renderer.camera);
  const attack=u.attack||u.motion,p=attack?attack.elapsed/attack.duration:1,r=motionRhythm('sword',attack||{}),phase=p<r.windup?'構え・踏み込み':p<r.contactEnd?'斬撃':p<r.follow?'振り抜き':'戻し';
  const amount=Math.min(1,u.charge/battle.maxCharge(u));status.textContent=u.charging&&!u.attack?`チャージ ${Math.round(amount*100)}%${amount===1?' · 最大チャージ · 離して攻撃':''}`:attack?`${attack.charge>0?'回転薙ぎ払い':`${u.combo+1}段目：${names[u.combo]}`}　·　${phase}`:'構え';
 }
