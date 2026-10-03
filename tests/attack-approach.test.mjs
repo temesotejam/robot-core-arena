@@ -33,7 +33,7 @@ test('細い壁・斜めの接近・アリーナ外周は大きな時間刻み�
  const b=battle(),u=b.human;b.stage={...b.stage,depth:2};b.attack(u,0,{z:1});b.meleeStep(u,.3);assert(u.z<=.72);
 });
 test('コンボの先行入力は解放時の移動方向も保持して次の攻撃につなぐ',()=>{
- for(const z of [1,-1]){const b=battle(),u=b.human;tap(b);while(b.runtime(u).cooldown>.16)b.tick(1/120);tap(b,{z});assert.equal(u.queuedAttack.input.z,z);const first=u.attack.id;for(let i=0;i<100&&(!u.attack||u.attack.id===first);i++)b.tick(1/120);assert.equal(u.combo,1);assert.equal(!!u.attack.approach,z===1);}
+ for(const z of [1,-1]){const b=battle(),u=b.human;const v=b.entities[1];v.z=.8;tap(b);while(b.runtime(u).cooldown>.16)b.tick(1/120);assert(u.comboHit);v.z=u.z+4;tap(b,{z});assert.equal(u.queuedAttack.input.z,z);const first=u.attack.id;for(let i=0;i<100&&(!u.attack||u.attack.id===first);i++)b.tick(1/120);assert.equal(u.combo,1);assert.equal(!!u.attack.approach,z===1);}
 });
 test('最大チャージの前入力は回転の前に接近し、通常のチャージ構えと一周する軌跡を維持する',()=>{
  const b=battle(),u=b.human;b.entities[1].z=2.6;for(let i=0;i<96;i++)b.tick(1/120,{attack:true});assert.equal(u.z,0);b.tick(1/120,{z:1});const a=u.attack;assert.equal(a.charge,1);assert.equal(a.combo,0);assert(a.approach);while(a.approach.active||a.elapsed/a.duration<.20)b.tick(1/120);const z=u.z;while(u.attack&&u.attack.elapsed/u.attack.duration<.78)b.tick(1/120);assert(Math.abs(u.z-z)<1e-6);assert.equal(u.dashTime,0);assert(a.approach.travel>1.5);assert(Math.abs(a.origin[2]-a.approach.travel)<1e-6);

@@ -26,11 +26,13 @@ function reset(){
  battle.countdown=0;battle.training.freezeAI=true;battle.training.infinite=true;Object.assign(battle.human,{x:0,z:approachMode?-1.7:0,yaw:0});holdTarget();battle.human.target=withTarget?battle.entities[1].id:null;
  model=createRobot(config,id=>CATALOG[id]);model.active=0;renderer.world.add(model.root);
  targetModel=createRobot(defaultConfig(),id=>CATALOG[id],1);targetModel.active=0;for(const w of targetModel.weaponAttachments)w.visible=false;targetModel.root.traverse(m=>{if(m.isMesh&&m!==targetModel.ring&&!targetModel.weaponTrails.some(t=>t.mesh===m)){m.castShadow=false;m.material=m.material.clone();m.material.transparent=true;m.material.opacity=.32;m.material.depthWrite=false;m.userData.previewGhost=true;}});renderer.world.add(targetModel.root);accumulator=0;pressing=false;finishedAt=null;
- if(selected>=0&&selected<4){battle.human.combo=(selected+3)%4;battle.human.comboWindow=1;}
+ // Individual-cut inspection explicitly selects a pose; gameplay and the
+ // continuous review still require a real hit before advancing.
+ if(selected>=0&&selected<4){Object.assign(battle.human,{combo:(selected+3)%4,comboWindow:1,comboHit:true,comboChain:{weapon:'sword',set:0,hits:new Set()}});}
 }
 function step(){
  const u=battle.human,rt=battle.runtime(u);let input={};
- const first=!u.attack&&!u.motion&&battle.time<.2,follow=selected<0&&u.combo<3&&u.attack&&!u.queuedAttack&&rt.cooldown<=.15&&rt.cooldown>0;
+ const first=!u.attack&&!u.motion&&battle.time<.2,follow=selected<0&&u.comboHit&&u.combo<3&&u.attack&&!u.queuedAttack&&rt.cooldown<=.15&&rt.cooldown>0;
  if(selected===4){const holdTime=battle.maxCharge(u)*chargeLevel+(chargeLevel===1?.25:0);input=manualMode?{attack:manualHeld,guard:manualCancel}:{attack:battle.time<holdTime};manualCancel=false;}
  else if(pressing)pressing=false;else if(first||follow){input={attack:true};pressing=true;}
  if(approachMode&&u.lastAttackHeld&&!input.attack)input.z=1;

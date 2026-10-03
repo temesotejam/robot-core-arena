@@ -10,10 +10,11 @@ function battle(kind='sword'){
  const c=defaultConfig();c.sets[0]={item:`weapon:${kind}`,shield:null};
  const b=new Battle({allies:[c],enemies:[defaultConfig(0,true)],setup:{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true},getItem:id=>CATALOG[id],rng:()=>.99});b.countdown=0;b.training.freezeAI=true;b.training.infinite=true;return b;
 }
+function contact(b){const u=b.human,v=b.entities[1];Object.assign(u,{x:0,z:0,yaw:0,target:v.id});Object.assign(v,{x:0,z:.9,lp:100000});}
 function advance(b,seconds,input={}){for(let t=0;t<seconds-1e-8;t+=1/60)b.tick(1/60,input);}
 function tap(b){b.tick(1/60,{attack:true});b.tick(1/60,{attack:false});}
 test('終わり際の先行入力でソード4段がつながり、終段後は1段目へ戻る',()=>{
- const b=battle(),u=b.human;tap(b);assert.equal(u.combo,0);
+ const b=battle(),u=b.human;contact(b);tap(b);assert.equal(u.combo,0);
  for(const stage of [1,2,3,0]){while(b.runtime(u).cooldown>.16)b.tick(1/60);tap(b);assert(u.queuedAttack);const starts=b.consumeEvents().filter(e=>e.type==='attack').length;advance(b,.25);assert.equal(u.combo,stage);assert.equal(b.consumeEvents().filter(e=>e.type==='attack').length,1);assert.equal(starts,stage===1?1:0);}
  assert.equal(u.queuedAttack,null);
 });
@@ -85,12 +86,12 @@ test('振りかぶりと戻しでは命中せず、振る区間で一度だけ�
  b.meleeStep(u,u.attack.duration*.1);assert.equal(v.lp,initial);b.meleeStep(u,u.attack.duration*.15);assert(v.lp<initial);const after=v.lp;b.meleeStep(u,u.attack.duration*.5);assert.equal(v.lp,after);
 });
 test('先行入力の受付端でも次のフレームに繰り越して確実に実行する',()=>{
- const b=battle(),u=b.human;tap(b);u.attack.elapsed=u.attack.duration-.20;b.runtime(u).cooldown=.22;u.actionTime=0;u.lastAttackHeld=true;u.charging=true;u.charge=0;b.consumeEvents();b.handleInput(u,{},1/60);assert(u.queuedAttack);advance(b,.24);assert.equal(u.combo,1);assert.equal(b.consumeEvents().filter(e=>e.type==='attack').length,1);
+ const b=battle(),u=b.human;contact(b);tap(b);b.meleeStep(u,u.attack.duration*.5);assert(u.comboHit);u.attack.elapsed=u.attack.duration-.20;b.runtime(u).cooldown=.22;u.actionTime=0;u.lastAttackHeld=true;u.charging=true;u.charge=0;b.consumeEvents();b.handleInput(u,{},1/60);assert(u.queuedAttack);advance(b,.24);assert.equal(u.combo,1);assert.equal(b.consumeEvents().filter(e=>e.type==='attack').length,1);
 });
 
 test('先行入力時は次段の構えへつなぎ、開始時に直前の全身姿勢を引き継ぐ',()=>{
  for(const kind of Object.keys(COMBO_CLIPS)){
-  const b=battle(kind),u=b.human;b.attack(u);const before={...u.motion,elapsed:u.motion.duration};u.motion=before;u.attack=null;b.runtime(u).cooldown=0;u.actionTime=0;u.queuedAttack={charge:0,remaining:.1};
+  const b=battle(kind),u=b.human;contact(b);b.attack(u);b.meleeStep(u,u.attack.duration*.9);assert(u.comboHit);const before={...u.motion,elapsed:u.motion.duration};u.motion=before;u.attack=null;b.runtime(u).cooldown=0;u.actionTime=0;u.queuedAttack={charge:0,remaining:.1};
   const expected=sampleMotion(kind,before,{nextCombo:1});assert.notDeepEqual(expected.right,sampleMotion(kind,null).right);assert(b.attack(u));
   const actual=sampleMotion(kind,u.attack);for(const key of ['right','left','body','drop','shift','feet'])assert.deepEqual(actual[key],expected[key],`${kind}: ${key}の接続`);
   const settled=sampleMotion(kind,{...u.attack,elapsed:u.attack.duration});assert.deepEqual(settled.right,sampleMotion(kind,null).right);
@@ -118,7 +119,7 @@ test('全身の脚関節がつながり、待機・歩行・コンボで足が�
  }
 });
 test('コンボ終段の命中方向へ機体全体が倒れ、回復までポーズで時計が止まる',()=>{
- const b=battle('rapier'),u=b.human,v=b.entities[1];Object.assign(u,{x:0,z:0,yaw:0});Object.assign(v,{x:0,z:.8});u.target=v.id;assert(b.attack(u));advance(b,u.attack.duration+1/60);u.combo=u.stats.weapon.combo-2;u.comboWindow=1;assert(b.attack(u));advance(b,.1);assert(v.hitReaction);assert.equal(v.hitReaction.kind,'stagger');assert.equal(v.hitReaction.yaw,0);
+ const b=battle('rapier'),u=b.human,v=b.entities[1];Object.assign(u,{x:0,z:0,yaw:0});Object.assign(v,{x:0,z:.8});u.target=v.id;for(let i=0;i<u.stats.weapon.combo-1;i++){assert(b.attack(u));advance(b,u.attack.duration+1/60);assert(u.comboHit);}assert(b.attack(u));advance(b,.1);assert(v.hitReaction);assert.equal(v.hitReaction.kind,'stagger');assert.equal(v.hitReaction.yaw,0);
  const ref=createRobot(v.config,id=>CATALOG[id]);ref.active=0;ArenaRenderer.prototype.animateRobot.call({},ref,v,b.time);assert(new THREE.Vector3(0,1,0).applyQuaternion(ref.root.quaternion).z>.01);
  const snapshot=JSON.stringify([v.hitReaction,v.knockdown,v.y]);b.paused=true;advance(b,.1);assert.equal(JSON.stringify([v.hitReaction,v.knockdown,v.y]),snapshot);b.paused=false;advance(b,2);assert.equal(v.hitReaction,null);assert.equal(v.knockdown,null);ArenaRenderer.prototype.animateRobot.call({},ref,v,b.time);assert(Math.abs(new THREE.Vector3(0,1,0).applyQuaternion(ref.root.quaternion).y-1)<1e-8);
 });

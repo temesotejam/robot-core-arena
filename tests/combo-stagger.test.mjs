@@ -14,8 +14,8 @@ function duel(kind='sword',victim='sword'){
 function packet(b,u,extra={}){return {id:`test:${b.serial++}`,weapon:u.stats.weapon.id,attackStats:u.stats,normal:true,coefficient:1,charge:0,finisher:false,exhausted:false,cPaid:new Set(),statusPaid:new Set(),freezeBoost:new Set(),...extra};}
 test('全9近接の実際の各段で、途中は攻撃を維持し、終段だけのけぞりと中断が同時に起きる',()=>{
  for(const [kind,w]of Object.entries(WEAPONS).filter(([,w])=>!w.ranged))for(let stage=0;stage<w.combo;stage++){
-  const b=duel(kind,'hammer'),[u,v]=b.entities;assert(b.attack(v));const interrupted=v.attack;v.queuedAttack={charge:0,remaining:.2};v.charging=true;v.charge=.5;
-  u.combo=stage-1;u.comboWindow=stage?1:0;assert(b.attack(u));assert.equal(u.attack.combo,stage);b.meleeStep(u,u.attack.duration*.9);assert(u.dealt>0,`${kind}/${stage}: 命中`);
+  const b=duel(kind,'hammer'),[u,v]=b.entities;for(let i=0;i<stage;i++){assert(b.attack(u));b.meleeStep(u,u.attack.duration);while(b.runtime(u).cooldown>0||u.actionTime>0)b.tick(1/120);assert(u.comboHit);}assert(b.attack(v));const interrupted=v.attack;v.queuedAttack={charge:0,remaining:.2};v.charging=true;v.charge=.5;
+  assert(b.attack(u));assert.equal(u.attack.combo,stage);b.meleeStep(u,u.attack.duration*.9);assert(u.dealt>0,`${kind}/${stage}: 命中`);
   const final=stage===w.combo-1;assert.equal(v.stun>0,final,`${kind}/${stage}: 怯み`);assert.equal(v.attack===null,final,`${kind}/${stage}: 中断`);assert.equal(v.hitReaction.kind,final?'stagger':'impact');
   if(final){assert.equal(v.hitReaction.duration,v.stun);assert.equal(v.queuedAttack,null);assert.equal(v.comboWindow,0);assert.equal(v.charging,false);assert.equal(v.down,0);}else{assert.equal(v.attack,interrupted);assert(v.queuedAttack);assert(v.charging);assert.equal(v.hitReaction.strength,0);}
  }

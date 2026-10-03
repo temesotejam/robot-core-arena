@@ -8,6 +8,12 @@ export const INTERRUPT_RECOVERY=.14;
 // Other attacks that flinch without a fall use the longer stagger below.
 export const STAGGER={duration:.50};
 export const KNOCKDOWN={down:1,rise:.50,height:.28,distance:.65,heavyDistance:.90};
+// Only the immediately preceding ordinary cut's real damage unlocks a follow-up.
+// Simulation and buffered pose blending must choose the same next cut.
+export function nextCombo(u,charge=0,w=u.stats?.weapon){
+ if(!w||w.ranged||w.id==='sword'&&charge>0||!u.comboHit||u.comboWindow<=0||u.comboChain?.weapon!==w.id||u.comboChain?.set!==u.active)return 0;
+ return (u.combo+1)%Math.max(1,w.combo);
+}
 export function poiseActive(attack){
  if(!attack?.normal||!attack.poise||attack.exhausted)return false;
  const rhythm=motionRhythm(attack.weapon,attack);
