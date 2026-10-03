@@ -41,6 +41,12 @@ try{
   window.locomotionReset();
  };await page.evaluate(installFixture);
  const analyze=samples=>{
+  let maxPelvisSpeed=0,steadyPelvisSpeed=0;
+  for(let i=1;i<samples.length;i++){
+   const a=samples[i-1],b=samples[i],dt=b.time-a.time;
+   if(dt>0&&a.mode==='walk'&&b.mode==='walk'){const speed=Math.abs(b.body[1]-a.body[1])/dt;maxPelvisSpeed=Math.max(maxPelvisSpeed,speed);if(b.time-samples[0].time>.5)steadyPelvisSpeed=Math.max(steadyPelvisSpeed,speed);}
+  }
+  assert(maxPelvisSpeed<.60&&steadyPelvisSpeed<.30,JSON.stringify({maxPelvisSpeed,steadyPelvisSpeed}));
   const anchors=[null,null],liftoffs=[0,0],heights=[0,0],lastContacts=[null,null],lastLandings=[null,null],touchdowns=[],sameFootStrides=[];let contactFrames=0,maxSlide=0,maxYawSlip=0,minFoot=Infinity;
   for(const s of samples)for(let i=0;i<2;i++){
    const f=s.feet[i],p=f.position;assert(p.every(Number.isFinite),JSON.stringify(s));minFoot=Math.min(minFoot,p[1]);heights[i]=Math.max(heights[i],p[1]);
@@ -55,10 +61,10 @@ try{
   }
   // One support change is one step. Root travel between real touchdown contact
   // changes and half the same foot's next touchdown span both measure stride;
-  // discard the shortened initial steps when comparing with the old .28 cap.
+  // discard the shortened initial steps when checking the restored .28 cap.
   const rootStrides=touchdowns.slice(3).map((p,i)=>Math.hypot(p.root[0]-touchdowns[i+2].root[0],p.root[1]-touchdowns[i+2].root[1]));
   const median=values=>values.length?[...values].sort((a,b)=>a-b)[Math.floor(values.length/2)]:0;
-  return {contactFrames,maxSlide,maxYawSlip,minFoot,liftoffs,heights,rootStride:median(rootStrides),sameFootStride:median(sameFootStrides.slice(2)),touchdowns:touchdowns.length};
+  return {contactFrames,maxSlide,maxYawSlip,minFoot,liftoffs,heights,rootStride:median(rootStrides),sameFootStride:median(sameFootStrides.slice(2)),touchdowns:touchdowns.length,maxPelvisSpeed,steadyPelvisSpeed};
  };
  const walking=[];
  for(const [name,input] of [['forward',{z:1}],['strafe',{x:1}],['backward',{z:-1}]]){
@@ -66,7 +72,7 @@ try{
   const travel=Math.hypot(result.x,result.z);assert(Math.abs(travel-result.move*.45*2)<.002,JSON.stringify({name,travel,move:result.move}));
   assert(result.samples.some(s=>s.mode==='walk'),name);assert(a.contactFrames>100&&a.liftoffs.every(n=>n>=2),JSON.stringify({name,...a}));
   assert(a.heights.every(h=>h>.05)&&a.minFoot>=.032,JSON.stringify({name,...a}));assert(a.maxSlide<.001&&a.maxYawSlip<.002,JSON.stringify({name,...a}));
-  assert(a.rootStride>.30&&a.sameFootStride>.30,JSON.stringify({name,...a}));
+  assert(a.rootStride>.17&&a.rootStride<.30&&a.sameFootStride>.17&&a.sameFootStride<.30,JSON.stringify({name,...a}));
   await page.screenshot({path:`charge-artifacts/locomotion-${name}.png`});walking.push({name,travel,move:result.move,...a});
  }
  const stopped=await page.evaluate(()=>window.locomotionRun({},.75)),tail=stopped.samples.slice(-24);
@@ -74,7 +80,7 @@ try{
  for(let i=0;i<2;i++){const p=tail[0].feet[i].position;assert(tail.every(s=>Math.hypot(s.feet[i].position[0]-p[0],s.feet[i].position[2]-p[2])<.003));}
  await page.screenshot({path:'charge-artifacts/locomotion-stopped.png'});
  // This lane is beside the central north/south blocks, leaving enough clear
- // runway for boost → faster large-step walking → authored sword advance.
+ // runway for boost → faster walking → authored sword advance.
  const dash=await page.evaluate(()=>{window.locomotionReset('knight',3);return window.locomotionRun({z:1,dashPressed:true},.15);});
  assert(dash.samples.every(s=>s.dash>0&&s.mode==='dash'),JSON.stringify(dash.samples));assert(dash.z/.15>dash.move*1.5,JSON.stringify(dash));
  const dashAnkles=dash.samples.map(s=>s.feet.map(f=>f.position[1]));assert(Math.max(...dashAnkles.flat())-Math.min(...dashAnkles.flat())<.07,JSON.stringify(dashAnkles));
@@ -101,7 +107,7 @@ try{
   const b=window.locomotionReset('knight',3),u=b.human;Object.assign(u,{z:-2.7,target:null});delete window.locomotionApp.renderer.robots.get(u.id).locomotion;window.locomotionCamera={position:[9.2,1.6,0],target:[3,.48,0]};window.locomotionApp.renderer.render(b,1/60,b.time);
   const tick=b.tick.bind(b);window.locomotionVideoSamples=[];window.locomotionVideoDone=false;let previous=-1;
   b.tick=(dt)=>{if(b.paused)return;const moving=b.time<3;tick(dt,{x:0,z:moving?1:0});if(b.time!==previous){window.locomotionVideoSamples.push(window.locomotionSample());previous=b.time;}if(b.time>=3.8){b.paused=true;window.locomotionVideoDone=true;}};
-  const hud=app=>{const footer=app.hud.querySelector('.hud-footer>span');if(footer)footer.textContent=`大股歩行 → 停止 · SIM ${b.time.toFixed(2)} s · ${b.time<3?(u.stats.move*.45).toFixed(2):'0.00'} m/s`;};
+  const hud=app=>{const footer=app.hud.querySelector('.hud-footer>span');if(footer)footer.textContent=`歩行 → 停止 · SIM ${b.time.toFixed(2)} s · ${b.time<3?(u.stats.move*.45).toFixed(2):'0.00'} m/s`;};
   const update=window.locomotionApp.hudUpdate.bind(window.locomotionApp);window.locomotionApp.hudUpdate=()=>{update();hud(window.locomotionApp);};b.paused=false;
  });
  await review.waitForFunction(()=>window.locomotionVideoDone,{},{timeout:60000});

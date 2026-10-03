@@ -39,7 +39,7 @@ test('全5フレーム・30/60/120fps：通常地上移動は45%で、近接攻�
  }
 });
 
-test('前後・横・斜めを大股で歩き、接地足を世界に固定したまま以前より長く進み、左右交互に足を持ち上げる',t=>{
+test('前後・横・斜めを元の歩幅で速く歩き、接地足を世界に固定し、左右交互に足を持ち上げる',t=>{
  const measured=[];
  for(const frame of Object.keys(FRAMES).filter(f=>f!=='panzer'))for(const fps of fpsValues)for(const [x,z]of directions){
   const f=fixture(frame),{b,u,ref}=f;Object.assign(b.entities[1],{x:0,z:12});u.target=b.entities[1].id;draw(f);let previous=contactSnapshot(ref),seen=[false,false],lifted=[false,false],supportFrames=0;
@@ -53,7 +53,7 @@ test('前後・横・斜めを大股で歩き、接地足を世界に固定し�
    }previous=contacts;
   }
   assert(seen.every(Boolean)&&lifted.every(Boolean),`${frame}: both legs alternate supporting and swinging`);assert(supportFrames>fps/2,'test covers long planted intervals');assert(ref.locomotion.step>=5,'walk is a continuing alternating cycle');jointsConnected(ref);
-  assert(strides.length>=4,'measure several real touchdowns after the starting step');assert(Math.min(...strides)>.60,`${frame} ${fps}fps: same foot advances farther than the old maximum full stride of .56`);assert(supportTravel>.34,`${frame} ${fps}fps: pelvis advances farther during a fixed foot contact than the old support window`);measured.push({frame,fps,stride:Math.min(...strides),support:supportTravel});
+  assert(strides.length>=4,'measure several real touchdowns after the starting step');assert(Math.min(...strides)>.32&&Math.max(...strides)<.59,`${frame} ${fps}fps: restored stride stays within the original full-step range`);assert(supportTravel>.18&&supportTravel<.36,`${frame} ${fps}fps: restored step keeps a stable support interval`);measured.push({frame,fps,stride:Math.min(...strides),support:supportTravel});
  }
  for(const frame of Object.keys(FRAMES).filter(f=>f!=='panzer')){const rows=measured.filter(r=>r.frame===frame);t.diagnostic(`${frame}: minimum same-foot stride ${Math.min(...rows.map(r=>r.stride)).toFixed(3)} m; planted-support root travel ${Math.min(...rows.map(r=>r.support)).toFixed(3)}–${Math.max(...rows.map(r=>r.support)).toFixed(3)} m`);}
 });

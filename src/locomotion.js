@@ -51,11 +51,12 @@ export function sampleLocomotion(ref,u,time,{groundAt}={}){
  }
  if(mode==='walk'){
   const speed=distance/Math.max(dt,.0001),dir=[dx/distance,dz/distance];
+  const projection=i=>(state.feet[i].world[0]-u.x)*dir[0]+(state.feet[i].world[2]-u.z)*dir[1];
   if(!state.started||!['walk','idle'].includes(was)){
    // Rebase contacts after a boost, a jump or a committed attack. Initial
    // stride is shorter because both feet started underneath the pelvis.
    if(was!=='idle')state.feet=[-1,1].map((side,i)=>{const p=worldFoot(u.x-dx,u.z-dz,u.yaw,side);p[1]=floor(p[0],p[2])+ANKLE;return newFoot(p,u.yaw,state.feet[i].contact+1);});
-   state.started=true;state.phase=0;state.swing=0;state.stepLength=.21;state.step=0;state.stopping=null;state.turnaround=null;
+   state.started=true;state.phase=0;state.swing=projection(0)>projection(1)?1:0;state.stepLength=.14;state.step=0;state.stopping=null;state.turnaround=null;
   }
   const begin=()=>{
    const f=state.feet[state.swing];f.from=[...f.world];f.fromYaw=f.yaw;f.planted=false;
@@ -63,8 +64,7 @@ export function sampleLocomotion(ref,u,time,{groundAt}={}){
    // halfway through its swing exchanges the hips across the support foot.
    state.stepFacing=state.hipFacing+clamp(wrap(u.yaw-state.hipFacing),-.45,.45);
   };
-  const projection=i=>(state.feet[i].world[0]-u.x)*dir[0]+(state.feet[i].world[2]-u.z)*dir[1];
-  const restartLength=support=>Math.min(.21,Math.max(.03,projection(support)+.16));
+  const restartLength=support=>Math.min(.14,Math.max(.03,projection(support)+.16));
   if(was==='idle'&&state.stopping){const support=projection(0)>projection(1)?0:1;state.phase=0;state.stepLength=restartLength(support);state.swing=1-support;state.stopping=null;}
   if(!state.turnaround&&state.direction&&state.direction[0]*dir[0]+state.direction[1]*dir[1]<-.45){
    if(projection(1-state.swing)>=.02){state.phase=0;state.stepLength=restartLength(1-state.swing);}
@@ -85,19 +85,21 @@ export function sampleLocomotion(ref,u,time,{groundAt}={}){
    // At a touchdown the target is the remaining root travel plus the small
    // lead of the next support foot. It is constant during straight walking.
    const consumed=distance-travel,rx=u.x-dx+dir[0]*consumed,rz=u.z-dz+dir[1]*consumed;
-   const f=state.feet[state.swing],s=clamp(state.phase/SWING,0,1),p=worldFoot(rx,rz,state.stepFacing,state.swing?1:-1,0),ahead=(1-state.phase)*state.stepLength+.165;
+   const f=state.feet[state.swing],s=clamp(state.phase/SWING,0,1),p=worldFoot(rx,rz,state.stepFacing,state.swing?1:-1,0),ahead=(1-state.phase)*state.stepLength+.11;
    p[0]+=dir[0]*ahead;p[2]+=dir[1]*ahead;p[1]=floor(p[0],p[2])+ANKLE;
    if(!f.planted){
-    const t=smooth(s),lift=Math.sin(Math.PI*s)**2*.072;
+    // A short starting/corrective step clears the floor with a smaller lift;
+    // raising it to full stride height in half the time snaps the knee.
+    const t=smooth(s),clearance=Math.min(1,state.stepLength/.28),lift=Math.sin(Math.PI*s)**2*.072*clearance;
     f.world=[mix(f.from[0],p[0],t),mix(f.from[1],p[1],t)+lift,mix(f.from[2],p[2],t)];
     // Sample the ground under the moving foot too, to clear rising ramps.
     f.world[1]=Math.max(f.world[1],floor(f.world[0],f.world[2])+ANKLE+lift);
     f.yaw=f.fromYaw+wrap(state.stepFacing-f.fromYaw)*t;
-    const localX=Math.cos(u.yaw)*dir[0]-Math.sin(u.yaw)*dir[1],localZ=Math.sin(u.yaw)*dir[0]+Math.cos(u.yaw)*dir[1],roll=Math.sin(TAU*s)*Math.sin(Math.PI*s)*.20;
+    const localX=Math.cos(u.yaw)*dir[0]-Math.sin(u.yaw)*dir[1],localZ=Math.sin(u.yaw)*dir[0]+Math.cos(u.yaw)*dir[1],roll=Math.sin(TAU*s)*Math.sin(Math.PI*s)*.20*clearance;
     f.pitch=localZ*roll;f.roll=-localX*roll*.5;
     if(s>=1){f.planted=true;f.contact++;f.pitch=0;f.roll=0;}
    }
-   if(state.phase>=1-1e-9){state.phase=0;state.step++;state.swing=1-state.swing;state.stepLength=clamp(.225+speed*.105,.255,.42);begin();}
+   if(state.phase>=1-1e-9){state.phase=0;state.step++;state.swing=1-state.swing;state.stepLength=clamp(.15+speed*.105,.17,.28);begin();}
   }
   state.direction=dir;state.weight=Math.min(1,state.weight+dt/.10);state.stopping=null;
  }else if(state.started){
@@ -116,5 +118,5 @@ export function sampleLocomotion(ref,u,time,{groundAt}={}){
  state.hipFacing+=state.feet.reduce((sum,f)=>sum+wrap(f.yaw-state.hipFacing),0)/2;
  const dir=state.direction||[Math.sin(u.yaw),Math.cos(u.yaw)],localX=Math.cos(u.yaw)*dir[0]-Math.sin(u.yaw)*dir[1],localZ=Math.sin(u.yaw)*dir[0]+Math.cos(u.yaw)*dir[1],support=(state.swing?-1:1)*Math.sin(Math.PI*state.phase),weight=state.weight;
  state.time=time;state.x=u.x;state.z=u.z;state.y=u.y;state.yaw=u.yaw;
- return state.result=feet?{mode,feet,footYaw:state.feet.map(f=>wrap(f.yaw-u.yaw)),pitch:state.feet.map(f=>f.pitch),roll:state.feet.map(f=>f.roll),hipYaw:wrap(state.hipFacing-u.yaw),body:[localZ*.045*weight,-support*.032*weight,-support*.025*weight-localX*.025*weight],drop:(-.028-.009*Math.sin(Math.PI*state.phase))*weight,shift:[support*.008*weight,0],armSwing:-support*.026*weight}:null;
+ return state.result=feet?{mode,feet,footYaw:state.feet.map(f=>wrap(f.yaw-u.yaw)),pitch:state.feet.map(f=>f.pitch),roll:state.feet.map(f=>f.roll),hipYaw:wrap(state.hipFacing-u.yaw),body:[localZ*.045*weight,-support*.032*weight,-support*.025*weight-localX*.025*weight],drop:(-.028-.009*(1-Math.cos(TAU*state.phase))*.5)*weight,shift:[support*.008*weight,0],armSwing:-support*.026*weight}:null;
 }
