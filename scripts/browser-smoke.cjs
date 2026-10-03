@@ -77,13 +77,13 @@ await duelPage.evaluate(async()=>{
  app.state.units[0]=defaultConfig();app.state.enemies[0]=defaultConfig();
  for(const [c,kind]of [[app.state.units[0],'hammer'],[app.state.enemies[0],'knuckle']]){c.sets[0]={item:`weapon:${kind}`,shield:null};c.passives=[];c.abilities=[];}
  Object.assign(app.state.setup,{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true});app.startBattle();
- const b=app.battle;b.countdown=0;b.paused=true;b.training.infinite=true;b.ai=()=>({});b.rng=()=>.99;
+ const b=app.battle;b.countdown=0;b.paused=true;b.training.infinite=true;b.ai=u=>{const v=b.entities.find(v=>v!==u),d=Math.hypot(v.x-u.x,v.z-u.z);return d>.8?{x:(v.x-u.x)/d,z:(v.z-u.z)/d}:{};};b.rng=()=>.99;
  b.entities.forEach((u,i)=>{Object.assign(u,{x:0,z:i*.8,yaw:i?Math.PI:0,target:b.entities[1-i].id,lp:10000});u.stats.lp=10000;});
  b.attack(b.human);b.human.attack.elapsed=.12;b.human.motion.elapsed=.12;app.hudUpdate();
  window.duelBraces=0;const emit=b.event.bind(b);b.event=(type,data)=>{if(type==='brace')window.duelBraces++;emit(type,data);};
 });
 assert((await duelPage.locator('.hud-weapon').innerText()).includes('踏ん張り 52 / 52'));await duelPage.waitForTimeout(150);await duelPage.screenshot({path:'artifacts/poise-hud.png'});
-await duelPage.evaluate(async()=>{const {app}=await import('/src/main.js');app.battle.paused=false;function attack(){for(const u of app.battle.entities)app.battle.attack(u);requestAnimationFrame(attack);}requestAnimationFrame(attack);});
+await duelPage.evaluate(async()=>{const {app}=await import('/src/main.js');const b=app.battle;b.paused=false;const update=b.updateUnit.bind(b);b.updateUnit=(u,input,dt)=>update(u,u.human?b.ai(u,dt):input,dt);function attack(){for(const u of b.entities)if(!b.invulnerable(b.entities.find(v=>v!==u)))b.attack(u);requestAnimationFrame(attack);}requestAnimationFrame(attack);});
 await duelPage.waitForTimeout(8200);
 const duelResult=await duelPage.evaluate(async()=>{const {app}=await import('/src/main.js');return {damage:app.battle.entities.map(u=>u.dealt),braces:window.duelBraces};});
 assert(duelResult.damage.every(d=>d>100),JSON.stringify(duelResult));assert(duelResult.braces>0);await duelPage.screenshot({path:'artifacts/slow-fast-battle.png'});

@@ -5,6 +5,7 @@ import {CATALOG,WEAPONS} from '../src/data.js';
 import {defaultConfig} from '../src/customize.js';
 import {ArenaRenderer,createRobot} from '../src/render.js';
 import {STAGGER} from '../src/combat.js';
+import * as THREE from '../vendor/three.module.min.js';
 function duel(kind='sword',victim='sword'){
  const configs=[kind,victim].map(k=>{const c=defaultConfig();c.sets[0]={item:`weapon:${k}`,shield:null};c.passives=[];c.abilities=[];return c;});
  const b=new Battle({allies:[configs[0]],enemies:[configs[1]],setup:{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true},getItem:id=>CATALOG[id],rng:()=>.99});b.countdown=0;b.training.infinite=true;b.training.freezeAI=true;
@@ -27,8 +28,8 @@ test('終段の怯み中の追撃はダメージのみ加え、のけぞりの�
 });
 test('表示されたのけぞりと中断が一致し、ポーズ中は止まって、終了後に初段から再開できる',()=>{
  const b=duel(),[u,v]=b.entities,ref=createRobot(v.config,id=>CATALOG[id]);ref.active=0;b.attack(v);b.hit(u,v,packet(b,u));ArenaRenderer.prototype.animateRobot.call({},ref,v,0);assert(v.attack);assert.equal(v.hitReaction.strength,0);
- b.hit(u,v,packet(b,u,{finisher:true}));b.tick(STAGGER.duration/8);b.tick(STAGGER.duration/8);ArenaRenderer.prototype.animateRobot.call({},ref,v,b.time);assert.equal(v.attack,null);assert(Math.abs(ref.bodyPivot.rotation.x)>.1);
- const before=JSON.stringify([v.stun,v.hitReaction]);b.paused=true;b.tick(.04);assert.equal(JSON.stringify([v.stun,v.hitReaction]),before);b.paused=false;for(let i=0;i<12;i++)b.tick(.04);assert.equal(v.hitReaction,null);assert.equal(v.stun,0);assert(b.attack(v));assert.equal(v.combo,0);
+ b.hit(u,v,packet(b,u,{finisher:true}));b.tick(STAGGER.duration/8);b.tick(STAGGER.duration/8);ArenaRenderer.prototype.animateRobot.call({},ref,v,b.time);assert.equal(v.attack,null);assert(new THREE.Vector3(0,1,0).applyQuaternion(ref.root.quaternion).y<.9);
+ const before=JSON.stringify([v.stun,v.hitReaction,v.knockdown,v.y]);b.paused=true;b.tick(.04);assert.equal(JSON.stringify([v.stun,v.hitReaction,v.knockdown,v.y]),before);b.paused=false;for(let i=0;i<55&&v.knockdown;i++)b.tick(.04);assert.equal(v.knockdown,null);assert.equal(v.hitReaction,null);assert.equal(v.stun,0);assert(b.attack(v));assert.equal(v.combo,0);
 });
 test('終段をガードするとコンボを維持し、疲労攻撃は怯ませず、チャージは独立して怯ませる',()=>{
  const guard=duel(),[u,v]=guard.entities;v.guard=true;guard.hit(u,v,packet(guard,u,{finisher:true}));assert.equal(v.stun,0);assert.equal(v.hitReaction.kind,'guard');

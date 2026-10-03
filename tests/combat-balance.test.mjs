@@ -15,7 +15,10 @@ function committed(b,u){assert(b.attack(u));u.attack.elapsed=.1;u.motion.elapsed
 test('遅い近接4種は軽い4種の連打に攻撃を返せる：処理順・60/120fps・先手を変えて検証',()=>{
  for(const heavy of Object.keys(POISE))for(const light of ['knuckle','dagger','rapier','dualSword'])for(const reverse of [false,true])for(const fps of [60,120])for(const delay of [-.1,0,.1]){
   const b=reverse?duel(light,heavy):duel(heavy,light),h=b.entities.find(u=>u.stats.weapon.id===heavy),l=b.entities.find(u=>u.stats.weapon.id===light);let braces=0;
-  for(let i=0;i<fps*6;i++){if(i/fps>=Math.max(0,-delay))b.attack(l);if(i/fps>=Math.max(0,delay))b.attack(h);b.tick(1/fps);braces+=b.consumeEvents().filter(e=>e.type==='brace').length;}
+  // Finishers now create distance. Both fighters pursue before their next exchange.
+  const pursue=u=>{const v=b.entities.find(v=>v!==u),d=Math.hypot(v.x-u.x,v.z-u.z);return d>.8?{x:(v.x-u.x)/d,z:(v.z-u.z)/d}:{};};b.ai=pursue;
+  // Include several full recoveries, and do not waste combos on a protected target.
+  for(let i=0;i<fps*10;i++){if(i/fps>=Math.max(0,-delay)&&!b.invulnerable(h))b.attack(l);if(i/fps>=Math.max(0,delay)&&!b.invulnerable(l))b.attack(h);b.tick(1/fps,pursue(b.human));braces+=b.consumeEvents().filter(e=>e.type==='brace').length;}
   const label=`${heavy}/${light} reverse=${reverse} fps=${fps} delay=${delay}`;
   assert(h.dealt>300,`${label}: 遅い武器の攻撃が封じられる`);assert(l.dealt>200,`${label}: 軽い武器も攻撃できる`);assert(braces>0,label);
  }
@@ -41,7 +44,7 @@ test('出始め・戻し・疲労・チャージ待機でも途中の一撃で�
 test('中断した近接は怯み後に再試行でき、予約・チャージを消し、消費したテンションは返さない',()=>{
  const b=duel(),[h,l]=b.entities;b.training.infinite=false;committed(b,h);h.attack.elapsed=.01;h.queuedAttack={charge:0,remaining:.2};h.charging=true;h.charge=.5;const spent=h.tension;
  b.hit(l,h,packet(b,l,{finisher:true}));assert.equal(h.motion,null);assert.equal(h.queuedAttack,null);assert.equal(h.charge,0);assert.equal(h.charging,false);assert.equal(h.tension,spent);assert.equal(b.attack(h),false);
- for(let i=0;i<40;i++)b.tick(1/120);assert(b.attack(h));assert.equal(h.combo,0);
+ for(let i=0;i<240&&h.knockdown;i++){assert.equal(b.attack(h),false);b.tick(1/120);}assert.equal(h.knockdown,null);assert(b.attack(h));assert.equal(h.combo,0);
 });
 test('射撃への被弾で発射待ちや弾数をリセットしない',()=>{
  const b=duel('sniper','knuckle'),[r,l]=b.entities;b.attack(r);const rt=b.runtime(r),cooldown=rt.cooldown,ammo=rt.ammo;b.hit(l,r,packet(b,l));assert.equal(rt.cooldown,cooldown);assert.equal(rt.ammo,ammo);assert.equal(b.attack(r),false);
