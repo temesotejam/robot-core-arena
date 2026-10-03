@@ -3,7 +3,8 @@ import {motionRhythm} from './motion.js';
 // Prototype balance values: resilience to interruption, not damage reduction.
 export const POISE={lance:34,naginata:38,scythe:42,hammer:52};
 export const INTERRUPT_RECOVERY=.14;
-// Ordinary melee finishers launch a short fall; grounded recovery owns immunity.
+// Connected ordinary melee combos can launch on their finisher.
+// A lone finishing hit only staggers; grounded recovery owns fall immunity.
 // Other attacks that flinch without a fall use the longer stagger below.
 export const STAGGER={duration:.50};
 export const KNOCKDOWN={down:1,rise:.50,height:.28,distance:.65,heavyDistance:.90};

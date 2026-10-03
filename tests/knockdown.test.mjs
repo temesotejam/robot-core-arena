@@ -14,7 +14,7 @@ function duel(kind='sword',victim='sword',frame='knight'){
  b.entities.forEach((u,i)=>Object.assign(u,{x:0,z:i*.8,yaw:i?Math.PI:0,target:b.entities[1-i].id,lp:100000,c:0}));return b;
 }
 function packet(b,u,extra={}){return {id:`test:${b.serial++}`,weapon:u.stats.weapon.id,attackStats:u.stats,normal:true,coefficient:1,charge:0,finisher:false,exhausted:false,cPaid:new Set(),statusPaid:new Set(),freezeBoost:new Set(),...extra};}
-function launch(b,u=b.entities[0],v=b.entities[1]){assert(b.hit(u,v,packet(b,u,{finisher:true}))>0);assert.equal(v.knockdown.phase,'air');return v;}
+function launch(b,u=b.entities[0],v=b.entities[1]){const comboChain={hits:new Set()};b.hit(u,v,packet(b,u,{comboChain}));assert(b.hit(u,v,packet(b,u,{finisher:true,comboChain}))>0);assert.equal(v.knockdown.phase,'air');return v;}
 function until(b,condition,fps=120){for(let i=0;i<fps*5&&!condition();i++)b.tick(1/fps);assert(condition(),'5秒以内に指定の状態へ進む');}
 function shot(b,u,v,weapon='pistol'){
  const p=packet(b,u,{weapon}),s={owner:u.id,team:u.team,x:v.x,y:b.hitY(v),z:v.z-.65,vx:0,vy:0,vz:60,speed:60,range:20,travel:0,life:2,kind:weapon,target:v.id,packet:p,share:1,radius:.04,blast:0,homing:weapon==='missile'?2.5:0,visited:new Set(),group:p.id};

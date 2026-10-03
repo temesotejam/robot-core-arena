@@ -44,7 +44,7 @@ test('出始め・戻し・疲労・チャージ待機でも途中の一撃で�
 test('中断した近接は怯み後に再試行でき、予約・チャージを消し、消費したテンションは返さない',()=>{
  const b=duel(),[h,l]=b.entities;b.training.infinite=false;committed(b,h);h.attack.elapsed=.01;h.queuedAttack={charge:0,remaining:.2};h.charging=true;h.charge=.5;const spent=h.tension;
  b.hit(l,h,packet(b,l,{finisher:true}));assert.equal(h.motion,null);assert.equal(h.queuedAttack,null);assert.equal(h.charge,0);assert.equal(h.charging,false);assert.equal(h.tension,spent);assert.equal(b.attack(h),false);
- for(let i=0;i<240&&h.knockdown;i++){assert.equal(b.attack(h),false);b.tick(1/120);}assert.equal(h.knockdown,null);assert(b.attack(h));assert.equal(h.combo,0);
+ for(let i=0;i<240&&b.incapacitated(h);i++){assert.equal(b.attack(h),false);b.tick(1/120);}assert.equal(h.knockdown,null);assert(b.attack(h));assert.equal(h.combo,0);
 });
 test('射撃への被弾で発射待ちや弾数をリセットしない',()=>{
  const b=duel('sniper','knuckle'),[r,l]=b.entities;b.attack(r);const rt=b.runtime(r),cooldown=rt.cooldown,ammo=rt.ammo;b.hit(l,r,packet(b,l));assert.equal(rt.cooldown,cooldown);assert.equal(rt.ammo,ammo);assert.equal(b.attack(r),false);
