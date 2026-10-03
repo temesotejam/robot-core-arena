@@ -8,7 +8,7 @@ try{
  browser=await chromium.launch({headless:true,args:['--no-sandbox','--enable-unsafe-swiftshader']});
  fs.mkdirSync('charge-artifacts',{recursive:true});const errors=[];
  const page=await browser.newPage({viewport:{width:1100,height:800},recordVideo:{dir:'charge-artifacts',size:{width:1100,height:800}}});page.on('pageerror',e=>errors.push(e.message));
- await page.goto('http://127.0.0.1:4173/sword-motion.html?mode=charge');await page.locator('#pose').waitFor();
+ await page.goto('http://127.0.0.1:4173/sword-motion.html?mode=charge');await page.locator('#pose').waitFor();await page.evaluate(async()=>{window.chargeViewer=(await import('/src/sword-preview.js')).swordPreview;});
  assert.equal(await page.locator('[data-stage="4"]').getAttribute('aria-pressed'),'true');assert(await page.locator('#charge-controls').isVisible());
  await page.locator('#replay').click();await page.waitForTimeout(3000);
  await page.locator('#speed').selectOption('.25');await page.locator('#camera').selectOption('side');await page.locator('#replay').click();await page.waitForTimeout(8000);
@@ -25,21 +25,21 @@ try{
  }
  // A real keyboard hold/release on the viewer's accessible manual button.
  await page.locator('#speed').selectOption('1');await page.locator('#charge-hold').focus();await page.keyboard.down('Space');
- await page.waitForFunction(async()=>{const v=(await import('/src/sword-preview.js')).swordPreview;return v.battle.human.charge===v.battle.maxCharge(v.battle.human);});
+ await page.waitForFunction(()=>{const v=window.chargeViewer;return v.battle.human.charge===v.battle.maxCharge(v.battle.human);});
  await page.waitForFunction(()=>document.querySelector('#pose').textContent.includes('最大チャージ'));
  assert((await page.locator('#pose').innerText()).includes('最大チャージ'));
- await page.keyboard.up('Space');await page.waitForFunction(async()=>{const u=(await import('/src/sword-preview.js')).swordPreview.battle.human;return u.attack?.charge===1;});
- await page.waitForFunction(async()=>!(await import('/src/sword-preview.js')).swordPreview.battle.human.motion);
+ await page.keyboard.up('Space');await page.waitForFunction(()=>{const u=window.chargeViewer.battle.human;return u.attack?.charge===1;});
+ await page.waitForFunction(()=>!window.chargeViewer.battle.human.motion);
  // Pointer release also works; actual partial input produces a partial charged sweep.
  const box=await page.locator('#charge-hold').boundingBox();await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();
- await page.waitForFunction(async()=>(await import('/src/sword-preview.js')).swordPreview.battle.human.charge>=.3);await page.mouse.up();
- await page.waitForFunction(async()=>{const u=(await import('/src/sword-preview.js')).swordPreview.battle.human;return u.attack?.charge>0&&u.attack.charge<1;});
+ await page.waitForFunction(()=>window.chargeViewer.battle.human.charge>=.3);await page.mouse.up();
+ await page.waitForFunction(()=>{const u=window.chargeViewer.battle.human;return u.attack?.charge>0&&u.attack.charge<1;});
  // Canceling a pointer via focus loss clears the hold without firing.
- await page.mouse.down();await page.waitForFunction(async()=>(await import('/src/sword-preview.js')).swordPreview.battle.human.charging);
+ await page.mouse.down();await page.waitForFunction(()=>window.chargeViewer.battle.human.charging);
  // Focus loss and release can arrive within a single simulation frame. A
  // subsequent pointerup must not overwrite the pending cancellation.
  await page.evaluate(()=>{document.querySelector('#play').focus();document.querySelector('#charge-hold').dispatchEvent(new PointerEvent('pointerup'));});await page.mouse.up();
- await page.waitForFunction(async()=>{const u=(await import('/src/sword-preview.js')).swordPreview.battle.human;return !u.charging&&!u.attack;});
+ await page.waitForFunction(()=>{const u=window.chargeViewer.battle.human;return !u.charging&&!u.attack;});
  await page.waitForTimeout(200);assert(await page.evaluate(async()=>!(await import('/src/sword-preview.js')).swordPreview.battle.human.attack));
  await page.locator('#play').click();await page.locator('#charge-level').selectOption('.5');await page.locator('#camera').selectOption('threequarter');await page.locator('#replay').click();
  await page.evaluate(async()=>{const v=(await import('/src/sword-preview.js')).swordPreview;for(let i=0;i<48;i++)v.battle.tick(1/120,{attack:true});v.draw();});
