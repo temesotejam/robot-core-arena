@@ -3,7 +3,7 @@ export const ACTIONS = {
  moveLeft:{label:'左へ移動',group:'battle'}, moveRight:{label:'右へ移動',group:'battle'},
  attack:{label:'攻撃・チャージ',group:'battle'}, guard:{label:'ガード',group:'battle'},
  jump:{label:'ジャンプ',group:'battle'}, dash:{label:'ダッシュ',group:'battle'},
- switch:{label:'武器切り替え',group:'battle'}, lock:{label:'ロックオン',group:'battle'},
+ switch:{label:'武器切り替え',group:'battle'}, lock:{label:'ターゲット切り替え',group:'battle'},
  targetPrev:{label:'前のターゲット',group:'battle'}, targetNext:{label:'次のターゲット',group:'battle'},
  reset:{label:'視点リセット / コア回転',group:'battle'}, menu:{label:'必殺技メニュー',group:'battle'},
  pause:{label:'一時停止',group:'battle'}, confirm:{label:'メニュー決定',group:'menu'},

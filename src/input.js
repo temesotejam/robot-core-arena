@@ -6,7 +6,7 @@ export class Controls{
   this.touch={x:0,z:0,attack:false,guard:false};this.touchPressed=new Set();this.onLook=onLook;
   window.addEventListener('keydown',e=>{
    if(this.capture){e.preventDefault();e.stopImmediatePropagation();if(this.capture.device==='keyboard'&&!e.repeat&&isKeyboardCode(e.code)){this.blockedKeys.add(e.code);this.finishCapture(e.code);}return;}
-   if(this.blockedKeys.has(e.code)||['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)||e.target.isContentEditable)return;
+   if(e.repeat||this.blockedKeys.has(e.code)||['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)||e.target.isContentEditable)return;
    if(!this.keys.has(e.code))this.pressed.add(e.code);this.keys.add(e.code);
    if(this.mode==='battle'&&this.context!=='menu'&&Object.values(this.getBindings().keyboard).some(c=>c.includes(e.code)))e.preventDefault();
   },true);
@@ -50,6 +50,7 @@ export class Controls{
   if(pad&&this.mode==='battle'&&battle)this.onLook(axis(2)*dt*900,axis(3)*dt*650);
   const result={x:x/d,z:z/d,attack:battle&&(held('attack')||this.touch.attack),guard:battle&&(held('guard')||this.touch.guard)};
   for(const action of ['jump','dash','switch','lock','targetPrev','targetNext','reset','menu','pause'])result[`${action}Pressed`]=battle&&(edge(action)||tap(action));
+  if(menu&&this.mode==='battle')result.menuPressed=edge('menu')||tap('menu');
   for(const action of ['confirm','cancel','up','down'])result[`${action}Pressed`]=menu&&edge(action);
   this.pressed.clear();this.touchPressed.clear();this.prevButtons=buttons;return result;
  }

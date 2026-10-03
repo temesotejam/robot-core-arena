@@ -36,6 +36,11 @@ test('ゲームパッドの割り当てを変更し、メニュー操作と戦�
  pad([6]);assert(c.poll(.016).jumpPressed);assert(!c.poll(.016).jumpPressed);pad([]);c.poll(.016);
  pad([9]);const input=c.poll(.016,'menu');assert(input.confirmPressed);assert(!input.pausePressed);assert(!input.attack);
 });
+test('必殺技メニューを開く際に入力を消しても、キー自動反復では閉じず再押下で閉じる入力を返す',()=>{
+ const {controls:c,send}=fixture();send('keydown',{code:'KeyE'});assert(c.poll(.016).menuPressed);
+ c.clear();send('keydown',{code:'KeyE',repeat:true});assert(!c.poll(.016,'menu').menuPressed);assert(!c.poll(.016,'menu').menuPressed);
+ send('keyup',{code:'KeyE'});send('keydown',{code:'KeyE',repeat:false});assert(c.poll(.016,'menu').menuPressed);assert(!c.poll(.016,'menu').menuPressed);
+});
 test('キャプチャ中と登録直後は発火せず、離して押し直すと新しい入力が使える',()=>{
  const {controls:c,bindings:b,send,pad}=fixture();let captured=null;
  c.beginCapture('keyboard',code=>{captured=code;assignBinding(b,'keyboard','jump',0,code);});send('keydown',{code:'KeyJ'});assert.equal(captured,'KeyJ');assert(!c.poll(.016).jumpPressed);

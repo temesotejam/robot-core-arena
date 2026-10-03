@@ -35,7 +35,9 @@ try{
   window.locomotionRun=(input,seconds,lock=true)=>{
    const b=app.battle,u=b.human,v=b.entities[1],samples=[];b.paused=false;
    for(let i=0;i<Math.round(seconds*120);i++){
-    if(lock){Object.assign(v,{x:u.x,z:u.z+8});u.target=v.id;}else u.target=null;
+    // A travel-only review still has a living opponent under always-lock.
+    // Keep it ahead of the player so the fixed camera sees the same gait.
+    Object.assign(v,{x:u.x,z:u.z+8});if(lock)u.target=v.id;
     b.tick(1/120,{x:0,z:0,...input,...(i?{dashPressed:false}:{})});samples.push(window.locomotionSample());
    }
    b.paused=true;b.consumeEvents();window.locomotionCamera={position:[u.x+5.8,1.65,u.z],target:[u.x,.48,u.z]};app.hudUpdate();app.renderer.render(b,1/60,b.time);app.hudFrame();return {samples,move:u.stats.move,x:u.x,z:u.z,time:b.time};
@@ -122,9 +124,9 @@ try{
  const review=await browser.newPage({viewport:{width:1100,height:800},recordVideo:{dir:'charge-artifacts',size:{width:1100,height:800}}});review.on('pageerror',e=>errors.push(e.message));
  await review.goto('http://127.0.0.1:4173');await review.locator('.home-copy').waitFor();await review.evaluate(installFixture);
  await review.evaluate(()=>{
-  const b=window.locomotionReset('knight',3),u=b.human;Object.assign(u,{z:-2.7,target:null});delete window.locomotionApp.renderer.robots.get(u.id).locomotion;window.locomotionCamera={position:[9.2,1.6,0],target:[3,.48,0]};window.locomotionApp.renderer.render(b,1/60,b.time);
+  const b=window.locomotionReset('knight',3),u=b.human,v=b.entities[1];Object.assign(u,{z:-2.7});Object.assign(v,{x:u.x,z:u.z+8});delete window.locomotionApp.renderer.robots.get(u.id).locomotion;window.locomotionCamera={position:[9.2,1.6,0],target:[3,.48,0]};window.locomotionApp.renderer.render(b,1/60,b.time);
   const tick=b.tick.bind(b);window.locomotionVideoSamples=[];window.locomotionVideoDone=false;let previous=-1;
-  b.tick=(dt)=>{if(b.paused)return;const moving=b.time<3;tick(dt,{x:0,z:moving?1:0});if(b.time!==previous){window.locomotionVideoSamples.push(window.locomotionSample());previous=b.time;}if(b.time>=3.8){b.paused=true;window.locomotionVideoDone=true;}};
+  b.tick=(dt)=>{if(b.paused)return;const moving=b.time<3;Object.assign(v,{x:u.x,z:u.z+8});tick(dt,{x:0,z:moving?1:0});if(b.time!==previous){window.locomotionVideoSamples.push(window.locomotionSample());previous=b.time;}if(b.time>=3.8){b.paused=true;window.locomotionVideoDone=true;}};
   const hud=app=>{const footer=app.hud.querySelector('.hud-footer>span');if(footer)footer.textContent=`歩行 → 停止 · SIM ${b.time.toFixed(2)} s · ${b.time<3?(u.stats.move*.45).toFixed(2):'0.00'} m/s`;};
   const update=window.locomotionApp.hudUpdate.bind(window.locomotionApp);window.locomotionApp.hudUpdate=()=>{update();hud(window.locomotionApp);};b.paused=false;
  });

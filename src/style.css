@@ -12,3 +12,5 @@
 .setup-grid>.panel{min-width:0}.binding-table-scroll{max-width:100%;min-width:0}
 
 .charge-display.ready{color:var(--cyan);text-shadow:0 0 12px #79efcf55}
+
+.lock-status{position:absolute;top:105px;left:50%;transform:translateX(-50%);padding:6px 10px;background:rgba(9,22,30,.78);border:1px solid #345f54;border-radius:4px;color:var(--cyan);font-size:11px;max-width:calc(100% - 24px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}

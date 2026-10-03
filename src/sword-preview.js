@@ -14,7 +14,7 @@ const status=document.querySelector('#pose'),holdButton=document.querySelector('
 // Only this inspection page anchors and replenishes its training target.
 // Combat hit timing and the attacker's collision-limited step use the real Battle.
 function holdTarget(){
- const v=battle.entities[1];Object.assign(v,{x:0,z:withTarget?.90:4,y:withTarget?0:10,yaw:Math.PI,vx:0,vz:0,vy:0,grounded:true,knockdown:null,hitReaction:null,down:0,rise:0,stun:0,statusTime:0,dead:false,lp:v.stats.lp});
+ const v=battle.entities[1];Object.assign(v,{x:0,z:withTarget?.90:4,y:withTarget?0:10,yaw:Math.PI,vx:0,vz:0,vy:0,grounded:true,knockdown:null,hitReaction:null,down:0,rise:0,stun:0,statusTime:0,dead:!withTarget,lp:withTarget?v.stats.lp:0});
 }
 function reset(){
  manualHeld=false;manualCancel=false;

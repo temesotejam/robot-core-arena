@@ -100,8 +100,8 @@ test('先行入力時は次段の構えへつなぎ、開始時に直前の全�
 test('近接の踏み込みは少量で、壁と相手の手前で止まる',()=>{
  const run=b=>{const u=b.human;b.attack(u);for(let i=0;i<150&&u.attack;i++)b.meleeStep(u,1/120);};
  for(const kind of ['sword','knuckle','hammer','lance']){
-  const free=battle(kind),u=free.human;u.x=0;u.z=0;u.yaw=0;run(free);assert(Math.abs(u.z-motionRhythm(kind).advance)<1e-6);assert.equal(u.x,0);
-  const wall=battle(kind);Object.assign(wall.human,{x:0,z:-7.04,yaw:0});run(wall);assert(wall.human.z<=-7.03);
+  const free=battle(kind),u=free.human;u.x=0;u.z=0;u.yaw=0;free.entities[1].dead=true;u.target=null;run(free);assert(Math.abs(u.z-motionRhythm(kind).advance)<1e-6);assert.equal(u.x,0);
+  const wall=battle(kind);Object.assign(wall.human,{x:0,z:-7.04,yaw:0,target:null});wall.entities[1].dead=true;run(wall);assert(wall.human.z<=-7.03);
   const near=battle(kind),a=near.human,v=near.entities[1];Object.assign(a,{x:0,z:0,yaw:0});Object.assign(v,{x:0,z:.65});a.target=v.id;run(near);assert(a.z<=v.z-.61+1e-8);
  }
 });

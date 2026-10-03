@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../vendor/three.module.min.js';
-import {Battle} from '../src/sim.js';
+import {Battle,lockRange} from '../src/sim.js';
 import {ArenaRenderer,createRobot} from '../src/render.js';
 import {defaultConfig} from '../src/customize.js';
 import {CATALOG,FRAMES,PARTS,WEAPONS} from '../src/data.js';
@@ -14,7 +14,9 @@ const near=(a,b,message,tolerance=1e-8)=>assert(Math.abs(a-b)<tolerance,`${messa
 function fixture(frame='knight',kind='sword',model=true){
  const c=defaultConfig();c.armor=Object.fromEntries(PARTS.map(p=>[p,`armor:${frame}:${p}`]));c.sets=[0,1].map(()=>({item:`weapon:${kind}`,shield:WEAPONS[kind].shield?'shield:basic':null}));c.passives=[];c.abilities=[];
  const b=new Battle({allies:[c],enemies:[c],setup:{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true},getItem:id=>CATALOG[id],rng:()=>.99});b.countdown=0;b.training.freezeAI=true;b.stage={...b.stage,obstacles:[],ramps:[],width:100,depth:100};
- const u=b.human;Object.assign(u,{x:0,z:0,yaw:0,target:null});Object.assign(b.entities[1],{x:25,z:25,lp:100000});const ref=model?createRobot(c,id=>CATALOG[id]):null;if(ref)ref.active=0;return {b,u,ref};
+ // General gait tests have no living opponent. Movement can therefore face
+ // its travel direction without adding a product option to disable locking.
+ const u=b.human;Object.assign(u,{x:0,z:0,yaw:0,target:null});Object.assign(b.entities[1],{x:25,z:25,lp:100000,dead:true});const ref=model?createRobot(c,id=>CATALOG[id]):null;if(ref)ref.active=0;return {b,u,ref};
 }
 function draw({b,u,ref},groundAt=b.groundAt.bind(b)){
  ArenaRenderer.prototype.animateRobot.call({groundAt},ref,u,b.time);ref.root.updateMatrixWorld(true);
@@ -42,7 +44,7 @@ test('全5フレーム・30/60/120fps：通常地上移動は45%で、近接攻�
 test('前後・横・斜めを元の歩幅で速く歩き、接地足を世界に固定し、左右交互に足を持ち上げる',t=>{
  const measured=[];
  for(const frame of Object.keys(FRAMES).filter(f=>f!=='panzer'))for(const fps of fpsValues)for(const [x,z]of directions){
-  const f=fixture(frame),{b,u,ref}=f;Object.assign(b.entities[1],{x:0,z:12});u.target=b.entities[1].id;draw(f);let previous=contactSnapshot(ref),seen=[false,false],lifted=[false,false],supportFrames=0;
+  const f=fixture(frame),{b,u,ref}=f;Object.assign(b.entities[1],{x:0,z:12,dead:false});u.target=b.entities[1].id;draw(f);let previous=contactSnapshot(ref),seen=[false,false],lifted=[false,false],supportFrames=0;
   const touchdowns=[null,null],supports=[null,null],strides=[];let supportTravel=0;
   for(let i=0;i<fps*2;i++){
    b.tick(1/fps,{x,z});draw(f);assert.equal(ref.locomotion.mode,'walk');const contacts=contactSnapshot(ref);assert(contacts.some(c=>c.planted),'walking must always have a supporting foot');
@@ -112,16 +114,16 @@ test('壁で実移動が止まった後は入力を押し続けても足踏み�
  }
 });
 
-test('ロック解除の約180度旋回・左右ターゲット切替・入力急反転でも支持脚が届き、足を滑らせない',()=>{
- const scenarios=[{scenario:'lockLoss'},{scenario:'targetSwitch'},...[.25,.6,.7,1].map(reverseAt=>({scenario:'reverse',reverseAt}))];
+test('射程を超えたロック維持・ターゲット切替の約180度旋回・入力急反転でも支持脚が届き、足を滑らせない',()=>{
+ const scenarios=[{scenario:'rangeExit'},{scenario:'targetSwitch'},...[.25,.6,.7,1].map(reverseAt=>({scenario:'reverse',reverseAt}))];
  for(const frame of Object.keys(FRAMES).filter(f=>f!=='panzer'))for(const fps of fpsValues)for(const {scenario,reverseAt}of scenarios){
   const f=fixture(frame);if(scenario==='targetSwitch'){
    const c=f.u.config;f.b=new Battle({allies:[c],enemies:[c,c],setup:{allies:1,enemies:2,stage:'flat',duration:0,player:0,training:true},getItem:id=>CATALOG[id],rng:()=>.99});f.b.countdown=0;f.b.training.freezeAI=true;f.b.stage={...f.b.stage,obstacles:[],ramps:[],width:100,depth:100};f.u=f.b.human;Object.assign(f.u,{x:0,z:0,yaw:Math.PI/2});Object.assign(f.b.entities[1],{x:6,z:0});Object.assign(f.b.entities[2],{x:-6,z:0});
-  }else Object.assign(f.b.entities[1],{x:0,z:scenario==='lockLoss'?20:12});
+  }else Object.assign(f.b.entities[1],{x:0,z:scenario==='rangeExit'?20:12,dead:false});
   const {b,u,ref}=f;u.target=b.entities[1].id;draw(f);const startingYaw=u.yaw;let previous=contactSnapshot(ref),previousYaw=u.yaw,turn=0,unlocked=false,switches=0,maxZ=u.z;
   for(let i=0;i<fps*2;i++){
    if(scenario==='targetSwitch'&&[Math.round(fps*.7),Math.round(fps*1.4)].includes(i)){const before=u.target;b.cycleTarget(u,1,b.entities.slice(1));assert.notEqual(u.target,before,'the real target-cycle action chooses the other enemy');switches++;}
-   b.tick(1/fps,{x:0,z:scenario==='lockLoss'||scenario==='reverse'&&i>=Math.round(fps*reverseAt)?-1:1});draw(f);if(!u.target)unlocked=true;turn+=Math.abs(Math.atan2(Math.sin(u.yaw-previousYaw),Math.cos(u.yaw-previousYaw)));previousYaw=u.yaw;maxZ=Math.max(maxZ,u.z);
+   b.tick(1/fps,{x:0,z:scenario==='rangeExit'||scenario==='reverse'&&i>=Math.round(fps*reverseAt)?-1:1});draw(f);if(!u.target)unlocked=true;turn+=Math.abs(Math.atan2(Math.sin(u.yaw-previousYaw),Math.cos(u.yaw-previousYaw)));previousYaw=u.yaw;maxZ=Math.max(maxZ,u.z);
    const contacts=contactSnapshot(ref),label=`${frame} ${fps}fps ${scenario}${reverseAt===undefined?'':` at ${reverseAt}s`} frame ${i}`;assert(contacts.some(c=>c.planted),`${label}: support stays on the ground`);fixedContacts(previous,contacts,label);previous=contacts;jointsConnected(ref);
    for(let j=0;j<2;j++){
     const leg=ref.feet[j],bounds=new THREE.Box3().setFromObject(leg.foot);assert(bounds.min.y>=-.002,`${label}: foot enters the floor`);
@@ -129,7 +131,7 @@ test('ロック解除の約180度旋回・左右ターゲット切替・入力�
    }
    const before=poseSnapshot(ref);draw(f);assert.equal(poseSnapshot(ref),before,`${label}: same-time rerender is stable`);
   }
-  if(scenario==='lockLoss'){assert(unlocked,'backing outside the lock range actually clears the target');assert(Math.abs(Math.atan2(Math.sin(u.yaw-startingYaw),Math.cos(u.yaw-startingYaw)))>2.4,'the body actually turns toward the opposite travel direction');}
+  if(scenario==='rangeExit'){assert(!unlocked,'backing outside the old lock range retains a living target');assert.equal(u.target,b.entities[1].id);assert(Math.hypot(u.x-b.entities[1].x,u.z-b.entities[1].z)>lockRange(u.stats)*1.15,'the real backward movement crosses the old lock-loss distance');assert(Math.abs(Math.atan2(Math.sin(u.yaw-startingYaw),Math.cos(u.yaw-startingYaw)))<.075,'the body keeps facing the opponent while walking backward');assert(u.vz<0,'range-exit coverage uses real backward travel');}
   if(scenario==='targetSwitch'){assert.equal(switches,2);assert(turn>Math.PI,'the body actually turns while selecting opposite enemies');}
   if(scenario==='reverse'){assert(u.target,'input reversal keeps the original lock');assert(maxZ>.2&&u.z<maxZ-.8&&u.vz<0,'the real movement input reverses after forward walking');}
  }
