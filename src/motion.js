@@ -9,7 +9,7 @@ export const COMBO_CLIPS={
  dualSword:['rightCut','leftReturn','dualRise','rightDiagonal','leftDiagonal','crossFinish'],
  lance:['lowThrust','highThrust','lunge'],
  naginata:['sweep','sweepBack','poleDiagonal'],
- knuckle:['jabRight','jabLeft','bodyRight','bodyLeft','hook','uppercut'],
+ knuckle:['jabRight','jabLeft','bodyRight','leftSideKick','hook','uppercut'],
  dagger:['slashBack','slashOut','thrust','rising','retreatCut'],
  hammer:['hammerSweep','hammerSlam'],
  scythe:['sweepBack','sweep','hookDraw'],
@@ -114,9 +114,9 @@ function frames(kind,name){
  return {prepare,strike,follow,control:c.control,leftControl:c.leftControl};
 }
 function clipName(kind,attack){return attack.skill==='tech'&&['naginata','scythe'].includes(kind)?'spin':attack.charge>.5&&!['rapier','lance','knuckle'].includes(kind)?['hammer','naginata','scythe'].includes(kind)?'hammerSlam':'overhead':comboClip(kind,attack.combo||0);}
-export function sampleMotion(kind,attack,{nextCombo=null,charging=null,hasShield=attack?.blendFrom?.hasShield??charging?.from?.hasShield??false}={}){
+export function sampleMotion(kind,attack,{nextCombo=null,charging=null,hasShield=attack?.blendFrom?.hasShield??charging?.from?.hasShield??false,legFrame=attack?.legFrame||'knight'}={}){
  if(kind==='sword'&&(!attack||!attack.skill)){if(!attack&&charging)return swordChargeHold({...charging,hasShield});return swordMotion(attack,{nextCombo,hasShield});}
- const melee=sampleMelee(kind,attack,{nextCombo,charging,hasShield});if(melee)return melee;
+ const melee=sampleMelee(kind,attack,{nextCombo,charging,hasShield,legFrame});if(melee)return melee;
  const base=readyFrame(kind);if(!attack||!COMBO_CLIPS[kind])return {name:'ready',...base};
  const name=clipName(kind,attack),c=frames(kind,name),r=motionRhythm(kind,attack),p=clamp(attack.elapsed/attack.duration),start=attack.blendFrom||base;
  let out;

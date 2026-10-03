@@ -4,7 +4,8 @@ import {swordArm} from './sword-motion.js';
 
 // Original hand-to-hand choreography. W's arm/torso exchanges inform the
 // compression, quick passage and counter-load; armed scenes are not labelled
-// as footage of this six-punch combination.
+// as footage of this ground combination. The airborne kicks inform the
+// chamber, sole-first extension and folded recovery; ground support is ours.
 const clamp=x=>Math.max(0,Math.min(1,x));
 const smooth=x=>{x=clamp(x);return x*x*(3-2*x);};
 const ramp=(p,a,b)=>smooth((p-a)/(b-a));
@@ -30,8 +31,9 @@ function curve(keys,p){
   return from.map((v,c)=>(2*t**3-3*t*t+1)*v+(t**3-2*t*t+t)*h*slope(i,c)+(-2*t**3+3*t*t)*to[c]+(t**3-t*t)*h*slope(i+1,c));
  }
 }
-function connectedPose({right=guards.right,left=guards.left,body=[.065,-.14,.012],hipYaw=-.06,drop=-.046,shift=[0,0],weight=0,shoulder=[0,0],footYaw=[-.05,.07],elbowPoles=poles}={}){
- const out=meleePose({right:hand(right),left:hand(left),body,hipYaw,drop,shift,weight,feet,footYaw,poles:elbowPoles,head:[-body[0]*.8,-body[1]*.95,-body[2]*.75]});
+function connectedPose({right=guards.right,left=guards.left,body=[.065,-.14,.012],hipYaw=-.06,drop=-.046,shift=[0,0],weight=0,shoulder=[0,0],footYaw=[-.05,.07],elbowPoles=poles,footTargets=feet,footPitch=[0,0],footRoll=[0,0],kneePoles=null}={}){
+ const out=meleePose({right:hand(right),left:hand(left),body,hipYaw,drop,shift,weight,feet:footTargets,footYaw,poles:elbowPoles,head:[-body[0]*.8,-body[1]*.95,-body[2]*.75]});
+ Object.assign(out,{footPitch,footRoll});if(kneePoles)out.kneePoles=kneePoles;
  for(const [i,side]of ['right','left'].entries())out.joints[side].clavicle=[0,shoulder[i]*.15,shoulder[i]];
  return alignFists(out);
 }
@@ -83,7 +85,24 @@ function makeClip(r){
  return {name:r.name,strikingSide:r.side,contact,prepare:sample(r.load),sample,
   keys:[[0,ready],[r.load,sample(r.load)],[r.hit,sample(r.hit)],[.58,sample(.58)],[1,ready]]};
 }
- const clips=recipes.map((r,stage)=>({...makeClip(r),stage}));
+function sampledKick(p){
+ if(p<=0||p>=1)return ready;
+ const chamber=pulse(p,.015,.18,.46,.72),drive=pulse(p,.13,.295,.43,.70),chest=pulse(p,.17,.345,.47,.76),
+  hipYaw=-.06-.92*drive+.13*pulse(p,0,.14,.18,.30),body=[.065-.08*chest,-.14-.58*chest,.012-.14*chest],
+  drop=-.046-.034*chamber,shift=[-.055*chamber,.015*drive];
+ // Fold the leg first. Extend the sole towards the opponent, fold it again,
+ // and only then put the boot down. Arms counterbalance at different heights.
+ const leftFoot=curve([[0,feet[1]],[.18,[.170,.235,.125]],[.285,[-.015,.355,.395]],[.40,[-.045,.360,.405]],[.55,[.170,.235,.125]],[.70,feet[1]],[1,feet[1]]],p),
+  right=curve([[0,guards.right],[.18,[-.225,.790,.165]],[.35,[-.245,.825,.175]],[.65,guards.right],[1,guards.right]],p),
+  left=curve([[0,guards.left],[.18,[.255,.655,.120]],[.35,[.280,.620,.130]],[.65,guards.left],[1,guards.left]],p);
+ return connectedPose({right,left,body,hipYaw,drop,shift,weight:Math.max(chamber,drive),footTargets:[feet[0],leftFoot],
+  footYaw:[-.05-.30*drive,.07-.12*drive],footPitch:[0,-.85*drive],footRoll:[0,.14*drive],
+  kneePoles:[[Math.sin(hipYaw),0,Math.cos(hipYaw)],[Math.sin(hipYaw)*(1-chamber),chamber,Math.cos(hipYaw)*(1-chamber)+.25*chamber]]});
+}
+const kick={name:'leftSideKick',stage:3,strikingSide:'left',strikingLimb:'leftFoot',authoredFeet:true,contact:makeClip(recipes[3]).contact,
+ prepare:sampledKick(.18),sample:sampledKick,keys:[[0,ready],[.18,sampledKick(.18)],[.33,sampledKick(.33)],[.58,sampledKick(.58)],[1,ready]]};
+const clips=recipes.map((r,stage)=>stage===3?kick:{...makeClip(r),stage});
+const trackPunch={...makeClip(recipes[3]),stage:3};
 const chargedRecipe={name:'chargedUppercut',side:'right',type:'upper',coil:[-.245,.440,.155],pass:[-.190,.575,.325],exit:[-.160,.970,.230],load:.22,hit:.39,end:.51,turn:.59,sink:.082};
 const charged=makeClip(chargedRecipe);
 const hold=sampled(chargedRecipe,chargedRecipe.load);
@@ -104,13 +123,14 @@ function chargeHold(charging){
 const tech={...makeClip({...chargedRecipe,name:'techUppercut',side:'left',coil:[.245,.440,.155],pass:[.190,.575,.325],exit:[.160,.970,.230]}),strikingSide:'left'};
 const normal={...makeClip({...recipes[1],name:'rushFinish',load:.20,hit:.36,end:.46,turn:.50,sink:.040})};
 const superClip={...makeClip({...recipes[0],name:'superCross',load:.23,hit:.38,end:.51,turn:.62,sink:.055})};
-export const KNUCKLE_MOTIONS={ready,hold,lead:0,chainStart:.48,chainAmount:1,clips,charged,tech,specials:{normal,tech,super:superClip},sampleClip,chargeHold};
+export const KNUCKLE_MOTIONS={ready,hold,lead:0,chainStart:.48,chainAmount:1,clips,charged,tech,specials:{normal,tech,super:superClip},sampleClip,chargeHold,
+ clipFor:(clip,legFrame)=>clip===kick&&legFrame==='panzer'?trackPunch:clip};
 
 // Guard takes effect immediately in the simulation. Only the visible return
 // from a cancelled charge takes 100 ms; repeated renders use simulation time.
 // If the player resumes charging or attacks during that return, inherit the
 // last displayed pose instead of snapping back to the simulation's ready pose.
-const poseFields=['right','left','joints','body','head','hipYaw','drop','shift','feet','footYaw','weight','poles'];
+const poseFields=['right','left','joints','body','head','hipYaw','drop','shift','feet','footYaw','footPitch','footRoll','kneePoles','weight','poles'];
 export function presentKnuckle(ref,motion,{time,mode=null,enabled=true}){
  if(!enabled){delete ref.knucklePresentation;return motion;}
  let state=ref.knucklePresentation;

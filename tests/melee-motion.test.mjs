@@ -10,7 +10,7 @@ import {CATALOG,PARTS,WEAPONS} from '../src/data.js';
 
 const kinds=['rapier','dualSword','lance','naginata','knuckle','dagger','hammer','scythe'];
 const frames=['knight','strider','wild','brawler','panzer'];
-const channels=['joints','right','left','body','head','hipYaw','drop','shift','feet','footYaw'];
+const channels=['joints','right','left','body','head','hipYaw','drop','shift','feet','footYaw','footPitch','footRoll','kneePoles'];
 const nearDistance=kind=>['knuckle','dagger'].includes(kind)?.65:.9;
 function fixture(kind,frame='knight',shield=WEAPONS[kind].shield){
  const config=defaultConfig();config.armor=Object.fromEntries(PARTS.map(p=>[p,`armor:${frame}:${p}`]));
@@ -21,12 +21,15 @@ function fixture(kind,frame='knight',shield=WEAPONS[kind].shield){
 }
 function draw(ref,u,time=0){ArenaRenderer.prototype.animateRobot.call({},ref,u,time);ref.root.updateMatrixWorld(true);}
 function feet(ref){return ref.feet.map(leg=>(leg.foot||leg).getWorldPosition(new THREE.Vector3()));}
+function legPose(ref){return ref.feet.filter(leg=>leg.knee).flatMap(leg=>[leg.upper,leg.lower,leg.knee,leg.foot].map(node=>({position:node.getWorldPosition(new THREE.Vector3()),quaternion:node.getWorldQuaternion(new THREE.Quaternion())})));}
+function continuousLegs(before,ref,label,position=1e-7,angle=1e-7){const after=legPose(ref);assert.equal(after.length,before.length);for(let i=0;i<after.length;i++){assert(after[i].position.distanceTo(before[i].position)<position,`${label}/${i}: 脚関節の位置が飛ぶ`);assert(after[i].quaternion.angleTo(before[i].quaternion)<angle,`${label}/${i}: 脚関節の向きが飛ぶ`);}}
 function placeAttack(u,kind,combo,p,yaw=0,extra={}){
- u.attack={id:`${kind}/${combo}`,weapon:kind,combo,elapsed:p,duration:1,normal:true,origin:[0,0,0],yaw,...extra};
+ u.attack={id:`${kind}/${combo}`,weapon:kind,combo,legFrame:CATALOG[u.config.armor.legs].frame,elapsed:p,duration:1,normal:true,origin:[0,0,0],yaw,...extra};
  const travel=motionRhythm(kind,u.attack).advance*stepPhase(u.attack);
  u.x=Math.sin(yaw)*travel;u.z=Math.cos(yaw)*travel;u.yaw=yaw+.13*Math.sin(p*4);
 }
-function damageMeshes(ref){
+function damageMeshes(ref,attack=null){
+ if(ref.kind==='knuckle'&&sampleMotion('knuckle',attack,{legFrame:ref.legFrame}).strikingLimb==='leftFoot')return [ref.feet[1].foot.children[0]];
  // Inspect the meshes displayed by the game: blade, spear tip, hammer head,
  // or the striking knuckle armour. Handles and decorative glow cannot count.
  return ref.weaponAttachments.filter(w=>w.name!=='shield').flatMap(w=>w.children.filter(m=>m.isMesh&&
@@ -37,9 +40,9 @@ function targetBox(distance){
  // expressed in the committed facing frame, with a small armour-width margin.
  return new THREE.Box3(new THREE.Vector3(-.21,.30,distance-.19),new THREE.Vector3(.21,.94,distance+.19));
 }
-function touchesFacingTarget(ref,yaw,distance){
+function touchesFacingTarget(ref,yaw,distance,attack){
  const inverse=new THREE.Matrix4().makeRotationY(-yaw),box=targetBox(distance);
- for(const mesh of damageMeshes(ref)){
+ for(const mesh of damageMeshes(ref,attack)){
   const g=mesh.geometry,p=g.attributes.position,ix=g.index,matrix=inverse.clone().multiply(mesh.matrixWorld);
   for(let i=0;i<(ix?.count??p.count);i+=3){
    const vertices=[0,1,2].map(k=>new THREE.Vector3().fromBufferAttribute(p,ix?ix.getX(i+k):i+k).applyMatrix4(matrix));
@@ -86,7 +89,7 @@ function assertRig(ref,f,label){
  }
 }
 
-test('近接8種の全段は30/60/120fpsの実命中時に刃・槍先・ヘッド・拳が正面の相手へ届く',()=>{
+test('近接8種の全段は30/60/120fpsの実命中時に刃・槍先・ヘッド・拳・ブーツが正面の相手へ届く',()=>{
  for(const kind of kinds)for(const frame of frames)for(const yaw of [0,.8,-1.4])for(const fps of [30,60,120])for(let combo=0;combo<WEAPONS[kind].combo;combo++){
   const {config,ref}=fixture(kind,frame),b=new Battle({allies:[config],enemies:[defaultConfig()],setup:{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true},getItem:id=>CATALOG[id],rng:()=>.99});
   const u=b.human,v=b.entities[1],distance=nearDistance(kind);Object.assign(u,{x:0,y:0,z:0,yaw,combo:(combo+WEAPONS[kind].combo-1)%WEAPONS[kind].combo,comboWindow:1,comboHit:true,comboChain:{weapon:kind,set:0,hits:new Map()}});
@@ -102,7 +105,7 @@ test('近接8種の全段は30/60/120fpsの実命中時に刃・槍先・ヘッ�
    // two frames. Inspect only this tick's past path, never a future pose.
    for(let i=0;i<=8;i++){
     const t=i/8;attack.elapsed=attack.previous+(elapsed-attack.previous)*t;u.x=previousRoot[0]+(root[0]-previousRoot[0])*t;u.z=previousRoot[1]+(root[1]-previousRoot[1])*t;draw(ref,u,attack.elapsed);
-    if(touchesFacingTarget(ref,yaw,distance)){
+    if(touchesFacingTarget(ref,yaw,distance,attack)){
      assert(Math.abs(Math.atan2(Math.sin(ref.root.rotation.y-yaw),Math.cos(ref.root.rotation.y-yaw)))<1e-8,`${label}: 命中方向から表示がずれる`);touched=true;break;
     }
    }
@@ -118,7 +121,7 @@ test('通常・チャージの全身FKは5フレームでも骨長を変えず�
   const {ref,u}=fixture(kind,frame);
   for(const charge of [0,.3,1])for(let combo=0;combo<(charge?1:WEAPONS[kind].combo);combo++)for(let n=0;n<=120;n++){
    const p=n/120;placeAttack(u,kind,combo,p,0,{charge});draw(ref,u,p);
-   const f=sampleMotion(kind,u.attack,{hasShield:ref.hasShield}),label=`${kind}/${frame}/${charge}/${combo}/${p}`;
+   const f=sampleMotion(kind,u.attack,{hasShield:ref.hasShield,legFrame:ref.legFrame}),label=`${kind}/${frame}/${charge}/${combo}/${p}`;
    assert(f.melee&&f.joints,`${label}: 全身関節モーションではない`);assertRig(ref,f,label);
    for(const channel of channels){const walk=value=>Array.isArray(value)?value.forEach(walk):value&&typeof value==='object'?Object.values(value).forEach(walk):typeof value==='number'?assert(Number.isFinite(value),`${label}: ${channel} が非有限値`):null;walk(f[channel]);}
    for(const joint of Object.values(f.joints))for(const key of ['upper','wrist'])assert(Math.abs(new THREE.Quaternion().fromArray(joint[key]).length()-1)<1e-8,`${label}: 関節の回転が正規化されていない`);
@@ -135,7 +138,7 @@ test('刃・長柄の中心線は攻撃中も胴・頭・腰・脚・盾を貫�
     const a=weapon.localToWorld(new THREE.Vector3(...path[0])),b=weapon.localToWorld(new THREE.Vector3(...path[1])),d=b.clone().sub(a);
     assert.equal(new THREE.Raycaster(a,d.clone().normalize(),0,d.length()).intersectObjects(meshes,false).length,0,`${label}: 武器が自機を貫通`);
    }
-   for(const mesh of damageMeshes(ref))assert(new THREE.Box3().setFromObject(mesh).min.y>=0,`${label}: 打撃部が床を貫通`);
+   for(const mesh of damageMeshes(ref,u.attack))assert(new THREE.Box3().setFromObject(mesh).min.y>=0,`${label}: 打撃部が床を貫通`);
   }
  }
 });
@@ -144,7 +147,7 @@ test('各段の支持足は前進・骨盤回転・追尾中も接地位置を�
  for(const kind of kinds)for(const frame of frames.filter(f=>f!=='panzer'))for(let combo=0;combo<WEAPONS[kind].combo;combo++){
   const {ref,u}=fixture(kind,frame),anchors=[null,null],hips=[],heights=[],head=[];
   for(let n=0;n<=240;n++){
-   const p=n/240;placeAttack(u,kind,combo,p,.7);draw(ref,u,p);const f=sampleMotion(kind,u.attack,{hasShield:ref.hasShield}),points=feet(ref);let contacts=0;
+   const p=n/240;placeAttack(u,kind,combo,p,.7);draw(ref,u,p);const f=sampleMotion(kind,u.attack,{hasShield:ref.hasShield,legFrame:ref.legFrame}),points=feet(ref);let contacts=0;
    for(let j=0;j<2;j++){
     if(f.feet[j][1]>.035+1e-9)anchors[j]=null;
     else {contacts++;anchors[j]??=points[j].clone();assert(points[j].distanceTo(anchors[j])<1e-7,`${kind}/${frame}/${combo}/${p}/${j}: 支持足が滑る`);}
@@ -159,6 +162,10 @@ test('各段の支持足は前進・骨盤回転・追尾中も接地位置を�
   assert(Math.max(...hips)-Math.min(...hips)>.02,`${kind}/${combo}: 骨盤が固定されたまま`);
   assert(Math.max(...heights)-Math.min(...heights)>.01,`${kind}/${combo}: 腰で荷重を受けない`);
   assert(Math.max(...head)>.02,`${kind}/${combo}: 頭が胴と一緒に固定されたまま`);
+  // Returning the feet to ready must also return the real thigh/shin bend
+  // planes. Equal ankle positions alone can hide a discontinuous knee flip.
+  placeAttack(u,kind,combo,1-1e-7,.7);draw(ref,u,1-1e-7);const finishingLegs=legPose(ref);
+  placeAttack(u,kind,combo,1,.7);draw(ref,u,1);continuousLegs(finishingLegs,ref,`${kind}/${frame}/${combo}/p1`,1e-6,1e-5);
  }
 });
 
@@ -188,14 +195,14 @@ test('実際の先行入力で全近接コンボが命中派生し、次段開�
   const {config,ref}=fixture(kind,frame),b=new Battle({allies:[config],enemies:[defaultConfig()],setup:{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true},getItem:id=>CATALOG[id],rng:()=>.99});b.countdown=0;b.training.freezeAI=true;b.training.infinite=true;
   const u=b.human,v=b.entities[1];Object.assign(u,{x:0,z:0,yaw:0,target:v.id});Object.assign(v,{x:0,z:nearDistance(kind),lp:100000});let boundaries=0;
   const attack=b.attack.bind(b);b.attack=(unit,...args)=>{
-   draw(ref,unit,b.time);const old=unit.motion&&sampleMotion(kind,unit.motion,{nextCombo:unit.queuedAttack?(unit.combo+1)%WEAPONS[kind].combo:null,hasShield:ref.hasShield}),points=feet(ref),hands=ref.arms.map(a=>a.hand.getWorldPosition(new THREE.Vector3())),root=ref.root.position.clone();
+   draw(ref,unit,b.time);const old=unit.motion&&sampleMotion(kind,unit.motion,{nextCombo:unit.queuedAttack?(unit.combo+1)%WEAPONS[kind].combo:null,hasShield:ref.hasShield,legFrame:ref.legFrame}),points=feet(ref),hands=ref.arms.map(a=>a.hand.getWorldPosition(new THREE.Vector3())),root=ref.root.position.clone(),legs=legPose(ref);
    const ok=attack(unit,...args);if(ok&&old){
-    draw(ref,unit,b.time);const after=feet(ref);assert(ref.root.position.distanceTo(root)<1e-9);
+    draw(ref,unit,b.time);const after=feet(ref);assert(ref.root.position.distanceTo(root)<1e-9);continuousLegs(legs,ref,`${kind}/${frame}/${unit.combo}/queued`);
     for(let j=0;j<2;j++){assert(after[j].distanceTo(points[j])<1e-7,`${kind}/${frame}/${unit.combo}/${j}: 次段で足が飛ぶ`);assert(ref.arms[j].hand.getWorldPosition(new THREE.Vector3()).distanceTo(hands[j])<1e-7,`${kind}/${frame}/${unit.combo}/${j}: 次段で手が飛ぶ`);}
-    const f=sampleMotion(kind,unit.attack,{hasShield:ref.hasShield});for(const key of channels)assert.deepEqual(f[key],old[key],`${kind}/${frame}/${unit.combo}: ${key} が飛ぶ`);boundaries++;
+    assert.equal(unit.attack.legFrame,frame);assert.equal(unit.motion.legFrame,frame);const f=sampleMotion(kind,unit.attack,{hasShield:ref.hasShield,legFrame:ref.legFrame});for(const key of channels)assert.deepEqual(f[key],old[key],`${kind}/${frame}/${unit.combo}: ${key} が飛ぶ`);boundaries++;
    }return ok;
   };
-  const tick=input=>{b.tick(1/120,input);draw(ref,u,b.time);},tap=()=>{tick({attack:true});tick({attack:false});};tap();
+  const tick=input=>{b.tick(1/120,input);draw(ref,u,b.time);for(const leg of ref.feet.filter(l=>l.knee))assert(new THREE.Box3().setFromObject(leg.foot).min.y>=0,`${kind}/${frame}/${u.combo}/${b.time}: 先行入力した次段の構えでブーツが床を貫通`);},tap=()=>{tick({attack:true});tick({attack:false});};tap();
   for(let stage=1;stage<WEAPONS[kind].combo;stage++){
    while(b.runtime(u).cooldown>.16)tick({});tap();assert(u.queuedAttack,`${kind}/${frame}/${stage}: 次段を予約しない`);
    for(let n=0;n<180&&u.combo!==stage;n++)tick({});assert.equal(u.combo,stage,`${kind}/${frame}: 命中が次段へ派生しない`);
@@ -226,12 +233,12 @@ test('実際の押下・保持・解除で8近接の全身構えを引き継ぎ�
   const dt=1/fps,held=full?Math.ceil(b.maxCharge(u)/dt)+1:Math.max(1,Math.round(.05/dt));
   for(let n=0;n<held;n++){b.tick(dt,{attack:true});draw(ref,u,b.time);assert(!u.attack,`${kind}/${fps}: 保持途中に攻撃を始める`);}
   assert(u.charging&&u.chargePose,`${kind}/${fps}: 実入力でチャージ構えを作らない`);
-  const heldPose=sampleMotion(kind,null,{charging:u.chargePose,hasShield:ref.hasShield}),heldAmount=u.charge,spentBefore=u.tension,original=b.attack.bind(b);let released=false;
+  const heldPose=sampleMotion(kind,null,{charging:u.chargePose,hasShield:ref.hasShield,legFrame:ref.legFrame}),heldAmount=u.charge,spentBefore=u.tension,original=b.attack.bind(b);let released=false;
   b.attack=(unit,charge,...args)=>{
    draw(ref,unit,b.time);const beforeFeet=feet(ref),beforeHands=ref.arms.map(a=>a.hand.getWorldPosition(new THREE.Vector3())),beforeBody=ref.bodyPivot.quaternion.clone(),beforeRoot=ref.root.position.clone();
    const ok=original(unit,charge,...args);assert(ok,`${kind}/${fps}: 支払える解除攻撃を始めない`);assert(unit.attack.blendFrom,`${kind}: 保持姿勢を解除攻撃へ渡さない`);
    for(const key of channels)assert.deepEqual(unit.attack.blendFrom[key],heldPose[key],`${kind}/${fps}/${full}: 保存された保持姿勢の ${key} が違う`);
-   const start=sampleMotion(kind,unit.attack,{hasShield:ref.hasShield});for(const key of channels)assert.deepEqual(start[key],heldPose[key],`${kind}/${fps}/${full}: 解除時 ${key} が飛ぶ`);
+   const start=sampleMotion(kind,unit.attack,{hasShield:ref.hasShield,legFrame:ref.legFrame});for(const key of channels)assert.deepEqual(start[key],heldPose[key],`${kind}/${fps}/${full}: 解除時 ${key} が飛ぶ`);
    draw(ref,unit,b.time);assert(ref.root.position.distanceTo(beforeRoot)<1e-9);assert(ref.bodyPivot.quaternion.angleTo(beforeBody)<1e-7,`${kind}/${fps}/${full}: 解除時に胴が飛ぶ`);
    const afterFeet=feet(ref);for(let j=0;j<2;j++){assert(afterFeet[j].distanceTo(beforeFeet[j])<1e-7,`${kind}/${fps}/${full}: 解除時に足が飛ぶ`);assert(ref.arms[j].hand.getWorldPosition(new THREE.Vector3()).distanceTo(beforeHands[j])<1e-7,`${kind}/${fps}/${full}: 解除時に手が飛ぶ`);}
    assert.equal(charge,full?1:0);assert.equal(unit.attack.combo,0);assert.equal(unit.attack.finisher,false);assert.equal(unit.comboHit,false);
@@ -253,7 +260,7 @@ test('近距離・空振りの満溜めブーストが5フレームの足・打�
   const context=`${kind}/${frame}/${near?'near':'far'}`;
   const inspect=()=>{
    draw(ref,u,b.time);for(const value of [...ref.bodyPivot.position.toArray(),...ref.bodyPivot.quaternion.toArray(),u.x,u.y,u.z])assert(Number.isFinite(value),`${context}: 姿勢が非有限値`);
-   const f=sampleMotion(kind,u.attack,{charging:u.charging?u.chargePose:null,hasShield:ref.hasShield});assertRig(ref,f,`${context}/fullcharge`);
+   const f=sampleMotion(kind,u.attack,{charging:u.charging?u.chargePose:null,hasShield:ref.hasShield,legFrame:ref.legFrame});assertRig(ref,f,`${context}/fullcharge`);
    for(const weapon of ref.weaponAttachments.filter(w=>w.name!=='shield'))for(const path of weaponPaths(kind)){
     const a=weapon.localToWorld(new THREE.Vector3(...path[0])),c=weapon.localToWorld(new THREE.Vector3(...path[1])),d=c.clone().sub(a);
     assert.equal(new THREE.Raycaster(a,d.clone().normalize(),0,d.length()).intersectObjects(meshes,false).length,0,`${context}: 実チャージ中に武器が自機を貫通`);
@@ -296,7 +303,7 @@ test('単発・通常コンボ・近距離と空振りの満溜めから待機�
      maxExtraJump=Math.max(maxExtraJump,delta.length());assert(delta.length()<1e-7,`${context}/${j}: 保持姿勢の削除で支持足が余分に ${delta.length()} 飛ぶ`);
     }expiries++;
    }
-   if(u.motion){const motion=sampleMotion(kind,u.motion,{hasShield:ref.hasShield});for(let j=0;j<2;j++){
+   if(u.motion){const motion=sampleMotion(kind,u.motion,{hasShield:ref.hasShield,legFrame:ref.legFrame});for(let j=0;j<2;j++){
     if(motion.feet[j][1]>.035+1e-9||u.dashTime>0)landingRoots[j]=null;
     else landingRoots[j]??=ref.root.position.clone();
    }}

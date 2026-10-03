@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Battle} from '../src/sim.js';
-import {CATALOG,WEAPONS} from '../src/data.js';
+import {CATALOG,PARTS,WEAPONS} from '../src/data.js';
 import {defaultConfig} from '../src/customize.js';
 import {COMBO_CLIPS,sampleMotion,motionRhythm} from '../src/motion.js';
 import {createRobot,ArenaRenderer} from '../src/render.js';
 import * as THREE from '../vendor/three.module.min.js';
-function battle(kind='sword'){
- const c=defaultConfig();c.sets[0]={item:`weapon:${kind}`,shield:null};
+function battle(kind='sword',frame='knight'){
+ const c=defaultConfig();c.armor=Object.fromEntries(PARTS.map(p=>[p,`armor:${frame}:${p}`]));c.sets[0]={item:`weapon:${kind}`,shield:null};
  const b=new Battle({allies:[c],enemies:[defaultConfig(0,true)],setup:{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true},getItem:id=>CATALOG[id],rng:()=>.99});b.countdown=0;b.training.freezeAI=true;b.training.infinite=true;return b;
 }
 function contact(b){const u=b.human,v=b.entities[1];Object.assign(u,{x:0,z:0,yaw:0,target:v.id});Object.assign(v,{x:0,z:.9,lp:100000});}
@@ -32,7 +32,7 @@ test('チャージ・長押し連射を保持し、ポーズ中は先行入力�
 test('コンボ段数は確定値と一致し、各段の軌跡が異なり、動作端で構えへ戻る',()=>{
  for(const [kind,clips]of Object.entries(COMBO_CLIPS)){
   assert.equal(clips.length,WEAPONS[kind].combo);const samples=new Set();
-  for(let combo=0;combo<clips.length;combo++){const zero=sampleMotion(kind,{combo,elapsed:0,duration:1}),end=sampleMotion(kind,{combo,elapsed:1,duration:1});assert.deepEqual(zero.right,end.right);assert.deepEqual(zero.left,end.left);const p=sampleMotion(kind,{combo,elapsed:.5,duration:1});samples.add(JSON.stringify([p.right,p.left,p.body,p.drop,p.shift]));}
+  for(let combo=0;combo<clips.length;combo++){const zero=sampleMotion(kind,{combo,elapsed:0,duration:1}),end=sampleMotion(kind,{combo,elapsed:1,duration:1});assert.deepEqual(zero.right,end.right);assert.deepEqual(zero.left,end.left);const p=sampleMotion(kind,{combo,elapsed:.5,duration:1});samples.add(JSON.stringify([p.right,p.left,p.body,p.drop,p.shift,p.feet,p.footPitch,p.footRoll]));}
   assert.equal(samples.size,clips.length,`${kind}の通常コンボに同じ動作が残る`);
  }
 });
@@ -42,15 +42,15 @@ test('二刀流の片腕斬撃は反対の剣を構えに残し、上段・下�
  for(const [combo,guard]of [[0,'left'],[1,'right'],[3,'left'],[4,'right']]){
   const p=sampleMotion('dualSword',{...attack,combo}),armed=guard==='left'?'right':'left';assert(p[guard].position[2]<.20);assert(p[armed].position[2]>.30);
  }
- for(const [high,low,hand]of [[0,2,'right'],[1,3,'left']]){
-  const at={duration:1,elapsed:motionRhythm('knuckle').contactEnd};assert(sampleMotion('knuckle',{...at,combo:high})[hand].position[1]-sampleMotion('knuckle',{...at,combo:low})[hand].position[1]>.10);
+ for(const frame of ['knight','panzer'])for(const [high,low,hand]of frame==='panzer'?[[0,2,'right'],[1,3,'left']]:[[0,2,'right']]){
+  const at={duration:1,elapsed:motionRhythm('knuckle').contactEnd},context={legFrame:frame};assert(sampleMotion('knuckle',{...at,combo:high},context)[hand].position[1]-sampleMotion('knuckle',{...at,combo:low},context)[hand].position[1]>.10);
  }
 });
 
 test('左右連打の軌跡は振る側だけに付き、既存のチャージ動作を通常斬撃で置き換えない',()=>{
- for(const [kind,combo,left]of [['dualSword',0,false],['dualSword',1,true],['knuckle',0,false],['knuckle',3,true]]){
-  const b=battle(kind),u=b.human,ref=createRobot(u.config,id=>CATALOG[id]);ref.active=0;u.attack={weapon:kind,combo,duration:1,elapsed:.2};ArenaRenderer.prototype.animateRobot.call({},ref,u,1);u.attack.elapsed=.3;ArenaRenderer.prototype.animateRobot.call({},ref,u,1.05);
-  for(const trail of ref.weaponTrails)assert.equal(trail.samples.length>0,trail.weapon.parent===ref.arms[1].hand?left:!left);
+ for(const [kind,combo,left,frame='knight']of [['dualSword',0,false],['dualSword',1,true],['knuckle',0,false],['knuckle',3,null],['knuckle',3,true,'panzer']]){
+  const b=battle(kind,frame),u=b.human,ref=createRobot(u.config,id=>CATALOG[id]),rhythm=motionRhythm(kind,{combo,legFrame:frame});ref.active=0;u.attack={weapon:kind,combo,legFrame:frame,duration:1,elapsed:rhythm.windup+.01};ArenaRenderer.prototype.animateRobot.call({},ref,u,1);u.attack.elapsed=Math.min(rhythm.contactEnd-.005,rhythm.windup+.06);ArenaRenderer.prototype.animateRobot.call({},ref,u,1.05);
+  for(const trail of ref.weaponTrails)assert.equal(trail.samples.length>0,left===null?false:trail.weapon.parent===ref.arms[1].hand?left:!left);
  }
  for(const kind of ['dualSword','naginata','scythe']){
   const attack={combo:0,duration:1,elapsed:.5},normal=sampleMotion(kind,attack),charged=sampleMotion(kind,{...attack,charge:1});assert.notDeepEqual(normal.right,charged.right);assert.equal(charged.name,kind==='dualSword'?'overhead':'hammerSlam');
@@ -124,15 +124,25 @@ test('コンボ終段の命中方向へ機体全体が倒れ、回復までポ�
  const snapshot=JSON.stringify([v.hitReaction,v.knockdown,v.y]);b.paused=true;advance(b,.1);assert.equal(JSON.stringify([v.hitReaction,v.knockdown,v.y]),snapshot);b.paused=false;advance(b,2);assert.equal(v.hitReaction,null);assert.equal(v.knockdown,null);ArenaRenderer.prototype.animateRobot.call({},ref,v,b.time);assert(Math.abs(new THREE.Vector3(0,1,0).applyQuaternion(ref.root.quaternion).y-1)<1e-8);
 });
 
-test('パンチで足を毎回入れ替えず、反対の手を構えに残す',()=>{
- const base=sampleMotion('knuckle',null);
- for(const hand of ['right','left'])assert(base[hand].position[1]>=.66,'拳を肩・顎に近い高さへ構える');
- for(let combo=0;combo<6;combo++)for(let i=0;i<=60;i++){
-  const p=sampleMotion('knuckle',{combo,elapsed:i/60,duration:1}),guard=p.strikingSide==='left'?'right':'left';
-  for(let foot=0;foot<2;foot++){assert.equal(p.feet[foot][0],base.feet[foot][0]);assert.equal(p.feet[foot][2],base.feet[foot][2]);assert(p.feet[foot][1]<=.043+1e-8);}
-  // The spare hand may tuck slightly as the chest turns, while staying at the
-  // cheek. It must never extend into a second simultaneous punch.
-  assert(new THREE.Vector3(...p[guard].position).distanceTo(new THREE.Vector3(...base[guard].position))<.025);assert(p[guard].position[1]>=.73);assert(p[guard].position[2]<.20);
+test('パンチは足を入れ替えず反対の手を構えに残し、二足4段目だけ支持足でキックする',()=>{
+ for(const frame of ['knight','strider','wild','brawler','panzer']){
+  const context={legFrame:frame},base=sampleMotion('knuckle',null,context);
+  for(const hand of ['right','left'])assert(base[hand].position[1]>=.66,'拳を肩・顎に近い高さへ構える');
+  let bootHeight=0;
+  for(let combo=0;combo<6;combo++)for(let i=0;i<=60;i++){
+   const p=sampleMotion('knuckle',{combo,elapsed:i/60,duration:1},context),guard=p.strikingSide==='left'?'right':'left',kick=frame!=='panzer'&&combo===3;
+   if(kick){
+    assert.equal(p.name,'leftSideKick');assert.equal(p.strikingLimb,'leftFoot');bootHeight=Math.max(bootHeight,p.feet[1][1]);
+    if(i/60<=.70){assert.deepEqual(p.feet[0],base.feet[0]);assert.equal(p.footStride[0],0,'接触と蹴り足の着地まで右足で支持する');}
+    for(const hand of ['right','left'])assert(p[hand].position[2]<.20,'キック中に拳まで前方へ打ち出さない');
+   }else {
+    for(let foot=0;foot<2;foot++){assert.equal(p.feet[foot][0],base.feet[foot][0]);assert.equal(p.feet[foot][2],base.feet[foot][2]);assert(p.feet[foot][1]<=.043+1e-8);}
+    // The spare hand may tuck slightly as the chest turns, while staying at
+    // the cheek. It must never extend into a second simultaneous punch.
+    assert(new THREE.Vector3(...p[guard].position).distanceTo(new THREE.Vector3(...base[guard].position))<.025);assert(p[guard].position[1]>=.73);assert(p[guard].position[2]<.20);
+   }
+  }
+  if(frame!=='panzer')assert(bootHeight>.30,'二足4段目で実際に蹴り足を持ち上げる');else assert.equal(bootHeight,0);
  }
 });
 test('全近接の手首が回転の折り返しで飛ばず、突きは胴を直立させる',()=>{

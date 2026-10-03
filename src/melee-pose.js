@@ -31,6 +31,12 @@ function blendJoint(a,b,t){return {upper:rotation(a.upper,b.upper,t),bend:a.bend
 export function blendMelee(a,b,t){
  if(t<=0)return a;if(t>=1)return b;
  const frame={...b,body:vector(a.body,b.body,t),head:vector(a.head||[0,0,0],b.head||[0,0,0],t),hipYaw:a.hipYaw+(b.hipYaw-a.hipYaw)*t,drop:a.drop+(b.drop-a.drop)*t,shift:vector(a.shift,b.shift,t),feet:a.feet.map((v,i)=>vector(v,b.feet[i],t)),footYaw:vector(a.footYaw,b.footYaw,t),weight:a.weight+(b.weight-a.weight)*t,poles:(a.poles||b.poles).map((v,i)=>vector(v,b.poles[i],t))};
+ for(const key of ['footPitch','footRoll'])if(a[key]||b[key])frame[key]=vector(a[key]||[0,0],b[key]||[0,0],t);
+ if(a.kneePoles||b.kneePoles){
+  // Authored poles use root space; poseLeg's default is forward in hip space.
+  const defaults=f=>Array.from({length:2},()=>[Math.sin(f.hipYaw),0,Math.cos(f.hipYaw)]);
+  frame.kneePoles=(a.kneePoles||defaults(a)).map((v,i)=>vector(v,(b.kneePoles||defaults(b))[i],t));
+ }
  if(a.twoHand&&b.twoHand){
   const qa=quaternion(a.shaft.rotation),qb=quaternion(b.shaft.rotation),e=new THREE.Euler().setFromQuaternion(qa.slerp(qb,t));
   return meleePose({...frame,right:{position:vector(a.shaft.position,b.shaft.position,t),rotation:[e.x,e.y,e.z]},twoHand:true});
