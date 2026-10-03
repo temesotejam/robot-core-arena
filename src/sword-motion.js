@@ -25,14 +25,29 @@ export function swordArm(j){
  const position=wrist.clone().add(new THREE.Vector3(j.side*.24,.66,0)).add(new THREE.Vector3(...j.clavicle)),e=new THREE.Euler().setFromQuaternion(hand);
  return {elbow,wrist,upper,lower,hand,pose:{position:position.toArray(),rotation:[e.x,e.y,e.z]}};
 }
-function finish(f){return {...f,right:swordArm(f.joints.right).pose,left:swordArm(f.joints.left).pose};}
+function finish(f){
+ // A chest accent must not steer the approved cutting plane with the wrist.
+ // Carry its authored blade frame separately, and counter-rotate at the
+ // shoulder instead. The small clavicle translation keeps the whole connected
+ // arm in that frame, including its elbow, rather than pinning just the hand.
+ if(f.bladeJoint){
+  const basis=new THREE.Quaternion().fromArray(quat(f.body)).invert().multiply(new THREE.Quaternion().fromArray(quat(f.bladeBody))),j=f.bladeJoint,anchor=new THREE.Vector3(j.side*.24,.66,0),clavicle=anchor.clone().add(new THREE.Vector3(...j.clavicle)).applyQuaternion(basis).sub(anchor).toArray();
+  f={...f,joints:{...f.joints,right:{...j,upper:basis.multiply(new THREE.Quaternion().fromArray(j.upper)).toArray(),clavicle}}};
+ }
+ return {...f,right:swordArm(f.joints.right).pose,left:swordArm(f.joints.left).pose};
+}
 function pose(r=NEUTRAL_R,body=[.015,-.18,0],hipYaw=-.06,drop=-.018,shift=[0,0],l=NEUTRAL_L,footYaw=[-.08,.04],clavicle=[0,0,0]){
- return finish({joints:{right:joint(r,-1,clavicle),left:joint(l,1)},body,hipYaw,drop,shift,footYaw,feet:BASE_FEET.map(v=>[...v]),weight:0,sword:true});
+ return finish({joints:{right:joint(r,-1,clavicle),left:joint(l,1)},body,head:[-body[0]*.65,-body[1]*.75,-body[2]*.35],hipYaw,drop,shift,footYaw,feet:BASE_FEET.map(v=>[...v]),weight:0,sword:true});
+}
+function express(f,accent,hipYaw,left,weight){
+ const body=f.body.map((v,i)=>v+accent[i]);
+ return finish({...f,body,head:[-body[0]*.88-.012,-body[1]*.92,-body[2]*.65],hipYaw,weight,joints:{...f.joints,left:joint(left,1)},bladeBody:f.bladeBody||f.body,bladeJoint:f.bladeJoint||f.joints.right});
 }
 function blendJoint(a,b,t){return {upper:slerp(a.upper,b.upper,t),bend:lerp(a.bend,b.bend,t),roll:lerp(a.roll,b.roll,t),wrist:slerp(a.wrist,b.wrist,t),clavicle:vec(a.clavicle,b.clavicle,t),side:a.side};}
 export function blendSword(a,b,t){
  if(t<=0)return a;if(t>=1)return b;
- return finish({sword:true,joints:{right:blendJoint(a.joints.right,b.joints.right,t),left:blendJoint(a.joints.left,b.joints.left,t)},body:vec(a.body,b.body,t),hipYaw:lerp(a.hipYaw,b.hipYaw,t),drop:lerp(a.drop,b.drop,t),shift:vec(a.shift,b.shift,t),footYaw:vec(a.footYaw,b.footYaw,t),feet:a.feet.map((v,i)=>vec(v,b.feet[i],t)),weight:lerp(a.weight,b.weight,t)});
+ const right=blendJoint(a.bladeJoint||a.joints.right,b.bladeJoint||b.joints.right,t);
+ return finish({sword:true,joints:{right,left:blendJoint(a.joints.left,b.joints.left,t)},bladeJoint:right,bladeBody:vec(a.bladeBody||a.body,b.bladeBody||b.body,t),body:vec(a.body,b.body,t),head:vec(a.head,b.head,t),hipYaw:lerp(a.hipYaw,b.hipYaw,t),drop:lerp(a.drop,b.drop,t),shift:vec(a.shift,b.shift,t),footYaw:vec(a.footYaw,b.footYaw,t),feet:a.feet.map((v,i)=>vec(v,b.feet[i],t)),weight:lerp(a.weight,b.weight,t)});
 }
 const ready=pose();
 // Each row is a complete pose, not a shared wrist path with a different sign.
@@ -75,12 +90,24 @@ const cuts=[
 // direction, with its own preparation and recovery timing.
 cuts[1]=[.10,.16,.27,.40,.53,.67].map((time,i)=>[time,cuts[0][[5,4,3,2,1,0][i]][1]]);
 cuts[1][0][1]=blendSword(cuts[0][5][1],cuts[0][4][1],.30);
+// Athletic poses are supported by the feet and pelvis; the free arm manages
+// momentum instead of remaining a static shield mount. The hips release the
+// loaded twist before the chest catches up, then both settle into the next cut.
+// Chest accents keep additional clavicle travel around .03 H.
+const counterGuard=[-.40,.16,.30,1.24,.10,.04,.02],counterPull=[.65,-.24,.34,.45,-.06,.04,.02],counterGather=[-.30,-.12,.30,1.43,-.10,.04,.02];
+const expression=[
+ {body:[[-.018,-.055,.015],[-.020,-.045,.020],[0,.040,.005],[.020,.045,-.020],[.015,.035,-.018],[.006,-.020,0]],hips:[-.30,-.10,.26,.44,.39,.28],left:[counterGuard,counterGuard,counterGather,counterPull,counterPull,counterGather],weight:[.42,.62,.95,1,.73,.38]},
+ {body:[[.010,.035,-.016],[.018,.020,-.018],[.012,-.040,-.004],[-.006,-.045,.012],[-.018,-.045,.020],[-.010,-.035,.012]],hips:[.35,.29,-.04,-.30,-.31,-.24],left:[counterPull,counterPull,counterGather,counterGuard,counterGuard,counterGather],weight:[.42,.62,.95,1,.73,.38]},
+ {body:[[.018,-.045,.018],[.020,-.035,.016],[-.012,.040,.008],[-.022,.030,-.012],[-.018,.015,-.015],[-.004,0,-.005]],hips:[-.23,-.06,.27,.35,.29,.14],left:[counterGuard,counterGuard,counterGather,[-.48,-.20,.35,1.23,-.12,.04,.02],[-.32,-.14,.29,1.46,-.10,.04,.02],counterGather],weight:[.5,.72,1,.85,.60,.34]},
+ {body:[[-.020,0,.008],[-.022,0,.008],[.015,0,0],[.025,0,-.008],[.020,0,-.008],[.005,0,0]],hips:[-.16,-.02,.16,.24,.25,.18],left:[counterGuard,[-.48,.12,.31,1.14,.08,.04,.02],counterGather,[-.03,-.20,.36,1.23,-.08,.04,.02],[.20,-.24,.34,1.16,-.12,.04,.02],counterGather],weight:[.45,.72,1,1,.72,.36]},
+];
+for(let stage=0;stage<4;stage++)cuts[stage]=cuts[stage].map(([time,f],i)=>[time,express(f,expression[stage].body[i],expression[stage].hips[i],expression[stage].left[i],expression[stage].weight[i])]);
 // The sweep keeps one horizontal blade plane. Rotation comes from the hips
 // and a full body turn, rather than rolling the wrist during the cut.
 const sweepArm=[.24759206,.01861577,-.43186010,1.83193764,-1.98144829,.025,0];
 const sweepLeft=[-.18,.10,.21,1.48,.02,.04,.02];
-const chargeLow=pose(sweepArm,[.025,-.25,.01],-.15,-.040,[.004,-.012],sweepLeft);
-const chargeHigh=pose(sweepArm,[.025,-.65,.01],-.28,-.065,[.008,-.020],sweepLeft,[-.12,.06]);
+const chargeLow=express(pose(sweepArm,[.025,-.25,.01],-.15,-.040,[.004,-.012],sweepLeft),[-.010,-.025,.010],-.19,counterGuard,.45);
+const chargeHigh=express(pose(sweepArm,[.025,-.65,.01],-.28,-.065,[.008,-.020],sweepLeft,[-.12,.06]),[-.016,-.045,.014],-.36,counterGuard,.80);
 export function swordChargeHold({amount=0,elapsed=0,from=null}={}){
  const loaded=blendSword(chargeLow,chargeHigh,ease(amount)),out=blendSword(from?.joints?from:ready,loaded,ease((elapsed-.10)/.22));
  return {...out,name:'chargeHold',chargeAmount:clamp(amount)};
@@ -104,10 +131,10 @@ function spinFeet(out,attack){
 }
 function swordChargedCut(attack,nextCombo){
  const amount=clamp(attack.charge),p=clamp(attack.elapsed/attack.duration),start=attack.blendFrom?.joints?attack.blendFrom:swordChargeHold({amount,elapsed:.32}),destination=nextCombo===null?ready:cuts[nextCombo%4][0][1];
- const open=pose(sweepArm,[.025,0,0],.05,-.055,[0,0],sweepLeft),out=track([
+ const open=express(pose(sweepArm,[.025,0,0],.05,-.055,[0,0],sweepLeft),[.015,0,-.012],.13,counterPull,1),out=track([
   [0,start],[.10,blendSword(start,chargeHigh,.18*amount)],
   [.20,open],[.50,open],[.78,open],
-  [.87,pose(sweepArm,[.025,.18,.01],.08,-.042,[0,0],sweepLeft)],
+  [.87,express(pose(sweepArm,[.025,.18,.01],.08,-.042,[0,0],sweepLeft),[.006,.020,-.004],.12,counterGather,.38)],
   [1,destination],
  ],p),planted=plantSword(out,attack,'chargeSweep');
  if(p<.20)return {...planted,spinYaw:0};
@@ -131,11 +158,11 @@ function track(keys,p){
  const nodes=[keys[Math.max(0,i-2)],keys[i-1],keys[i],keys[Math.min(keys.length-1,i+1)]],times=nodes.map(n=>n[0]),t=(p-times[1])/(times[2]-times[1]),frames=nodes.map(n=>n[1]);
  const vector=read=>cubic(frames.map(read),times,t),scalar=read=>vector(f=>[read(f)])[0];
  const joints={};for(const side of ['right','left']){
-  const js=frames.map(f=>f.joints[side]);joints[side]={side:js[1].side,upper:rotationCurve(js.map(j=>j.upper),times,t),bend:Math.max(.08,cubic(js.map(j=>[j.bend]),times,t)[0]),roll:cubic(js.map(j=>[j.roll]),times,t)[0],wrist:rotationCurve(js.map(j=>j.wrist),times,t),clavicle:cubic(js.map(j=>j.clavicle),times,t)};
+  const js=frames.map(f=>side==='right'?(f.bladeJoint||f.joints.right):f.joints.left);joints[side]={side:js[1].side,upper:rotationCurve(js.map(j=>j.upper),times,t),bend:Math.max(.08,cubic(js.map(j=>[j.bend]),times,t)[0]),roll:cubic(js.map(j=>[j.roll]),times,t)[0],wrist:rotationCurve(js.map(j=>j.wrist),times,t),clavicle:cubic(js.map(j=>j.clavicle),times,t)};
  }
  // Continuous tangents across authored keys avoid a stop at every intermediate
  // pose. Endpoint tangents settle; grip and blade remain attached throughout.
- return finish({sword:true,joints,body:vector(f=>f.body),hipYaw:scalar(f=>f.hipYaw),drop:scalar(f=>f.drop),shift:vector(f=>f.shift),footYaw:vector(f=>f.footYaw),feet:BASE_FEET.map(v=>[...v]),weight:scalar(f=>f.weight)});
+ return finish({sword:true,joints,bladeJoint:joints.right,bladeBody:vector(f=>f.bladeBody||f.body),body:vector(f=>f.body),head:vector(f=>f.head),hipYaw:scalar(f=>f.hipYaw),drop:scalar(f=>f.drop),shift:vector(f=>f.shift),footYaw:vector(f=>f.footYaw),feet:BASE_FEET.map(v=>[...v]),weight:scalar(f=>f.weight)});
 }
 export function swordMotion(attack,{nextCombo=null}={}){
  if(!attack)return {name:'ready',...ready};

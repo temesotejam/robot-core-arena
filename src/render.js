@@ -69,6 +69,13 @@ function poseSwordArm(arm,joint){
  // shoulder joint itself or pushing the elbow out to satisfy a wrist target.
  arm.shoulder.quaternion.identity().slerp(f.upper,.42);
 }
+function walkingJoint(joint,gait){
+ if(!gait)return joint;
+ // Keep the authored forearm/wrist grip and animate from the shoulder. Never
+ // mutate the shared sword ready pose or a combat pose saved for blending.
+ const upper=new THREE.Quaternion().setFromEuler(new THREE.Euler(...gait.rotation)).multiply(new THREE.Quaternion().fromArray(joint.upper));
+ return {...joint,upper:upper.toArray(),bend:joint.bend+gait.bend,clavicle:joint.clavicle.map((v,i)=>v+gait.clavicle[i])};
+}
 const THIGH=.155,SHIN=.17;
 function poseLeg(leg,target){
  const ankle=target.clone().sub(leg.position),distance=Math.min(ankle.length(),THIGH+SHIN-.001);ankle.setLength(distance);
@@ -114,10 +121,10 @@ function poseWeapons(ref,u=null,time=0,locomotion=null){
  const pulse=p=>{if(p<=0||p>=1)return 0;const t=p<.24?p/.24:1-(p-.24)/.76;return t*t*(3-2*t);},recoil=shot?pulse(shotProgress)*kick(w.id):0;
  for(const weapon of ref.weaponAttachments)if(weapon.userData.flash)weapon.userData.flash.visible=!!shot&&shotProgress<.3&&!u.dead&&!u.guard;
  for(const [i,arm]of ref.arms.entries()){
-  if(motion.joints&&!u?.guard&&(!u?.charging||attack||motion.name==='chargeHold')&&!u?.dead&&!(u?.down>0)){poseSwordArm(arm,motion.joints[i?'left':'right']);continue;}
+  if(motion.joints&&!u?.guard&&(!u?.charging||attack||motion.name==='chargeHold')&&!u?.dead&&!(u?.down>0)){poseSwordArm(arm,walkingJoint(motion.joints[i?'left':'right'],!attack&&!u?.charging?locomotion?.arms?.[i]:null));continue;}
   const side=arm.userData.side,armed=i===0||dual,p=armed&&!w.ranged?(i?motion.left:motion.right):readyPose(w.id,side),target=new THREE.Vector3(...p.position),rotation=new THREE.Euler(...p.rotation);
   if(armed&&w.ranged){const handRecoil=w.id==='dualGun'&&i===1?pulse((shotProgress-.12)/.88)*kick(w.id):recoil;target.z-=handRecoil;target.y+=handRecoil*.22;rotation.x=-handRecoil*(['pistol','shotgun','dualGun'].includes(w.id)?3.2:1.4);}
-  if(!attack&&!w.ranged&&locomotion){target.z+=(locomotion.armSwing||0)*(i?-1:1);}
+  if(!attack&&!w.ranged&&locomotion&&!u?.charging&&!u?.guard){target.z+=(locomotion.armSwing||0)*(i?-1:1);target.y+=(locomotion.arms?.[i]?.clavicle[1]||0);}
   if(u?.charging&&!w.ranged&&!attack&&i===0){target.y+=.10;rotation.x-=.6*Math.min(1,u.charge/(w.charge||1));}
   if(i===1&&ref.hasShield)target.set(.28,.43,.14);
   if(u?.guard){if(i===1)target.set(.18,w.id==='knuckle'?.68:.54,.25);else if(!w.ranged){target.set(-.23,w.id==='knuckle'?.68:.51,.21);rotation.x=w.id==='knuckle'?0:.75;}}
@@ -234,7 +241,8 @@ export class ArenaRenderer{
    }settle=Math.min(locomotion?.15:.10,settle);ref.legGroup.position.y-=settle;ref.bodyPivot.position.y-=settle;
   }
   for(const [i,leg]of ref.feet.entries())if(leg.knee){const foot=footTargets[i].clone().sub(ref.legGroup.position).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw);poseLeg(leg,foot);leg.foot.rotation.set(locomotion?.pitch[i]||0,(locomotion?.footYaw[i]??motion.footYaw[i]??0)-hipYaw+(canPose&&u.grounded&&motion.plantOrigin&&!u.guard?(motion.plantYaw??facing)-facing:0),locomotion?.roll[i]||0);}
-  ref.head.rotation.y=canPose?-motion.body[1]*(motion.sword?.75:.28):0;ref.head.rotation.x=canPose?-motion.body[0]*(motion.sword?.65:.20):0;recoveryPose(ref,u);ref.ring.material.opacity=u.buffTime>0?.85:.45;updateTrails(ref,u,time,motion.name);
+  const head=motion.head||[-motion.body[0]*(motion.sword?.65:.20),-motion.body[1]*(motion.sword?.75:.28),0];
+  ref.head.rotation.set(canPose?head[0]-(locomotion?.body[0]||0)*.65:0,canPose?head[1]-(locomotion?.body[1]||0)*.9:0,canPose?head[2]-(locomotion?.body[2]||0)*.7:0);recoveryPose(ref,u);ref.ring.material.opacity=u.buffTime>0?.85:.45;updateTrails(ref,u,time,motion.name);
   // Start the first step from the weapon's actual idle stance, rather than
   // snapping its support foot into the locomotion module's neutral stance.
   if(ref.locomotion.mode==='idle'&&!ref.locomotion.started)for(const [i,leg]of ref.feet.entries())if(leg.foot){const f=ref.locomotion.feet[i],direction=new THREE.Vector3(0,0,1).applyQuaternion(leg.foot.getWorldQuaternion(new THREE.Quaternion()));f.world=leg.foot.getWorldPosition(new THREE.Vector3()).toArray();f.from=[...f.world];f.yaw=Math.atan2(direction.x,direction.z);f.fromYaw=f.yaw;}

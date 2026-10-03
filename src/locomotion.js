@@ -116,7 +116,14 @@ export function sampleLocomotion(ref,u,time,{groundAt}={}){
  // sockets underneath a planted foot during a quick turn. Unwrap around the
  // last pelvis angle so opposite foot headings cannot flip their average.
  state.hipFacing+=state.feet.reduce((sum,f)=>sum+wrap(f.yaw-state.hipFacing),0)/2;
- const dir=state.direction||[Math.sin(u.yaw),Math.cos(u.yaw)],localX=Math.cos(u.yaw)*dir[0]-Math.sin(u.yaw)*dir[1],localZ=Math.sin(u.yaw)*dir[0]+Math.cos(u.yaw)*dir[1],support=(state.swing?-1:1)*Math.sin(Math.PI*state.phase),weight=state.weight;
+ const dir=state.direction||[Math.sin(u.yaw),Math.cos(u.yaw)],localX=Math.cos(u.yaw)*dir[0]-Math.sin(u.yaw)*dir[1],localZ=Math.sin(u.yaw)*dir[0]+Math.cos(u.yaw)*dir[1],support=(state.swing?-1:1)*Math.sin(Math.PI*state.phase),weight=smooth(state.weight),load=support*weight;
+ // The pelvis carries the supporting leg while the chest and arms counter it.
+ // A weapon remains carried in a guard, rather than swinging an idle hand path.
+ const carried=u.stats?.weapon?.ranged||u.guard||u.charging,expression=carried?.35:1,twist=load*(.35+.65*Math.abs(localZ));
+ const arms=[0,1].map(i=>{
+  const opposite=i?-1:1,shield=i===1&&ref.hasShield,amplitude=carried?.035:shield?.12:i?.23:.18,cycle=load*opposite;
+  return {rotation:[cycle*amplitude*localZ,cycle*.035*localX,-cycle*.075*localX],bend:-cycle*(carried?.015:shield?.035:.085),clavicle:[cycle*.004*localX,Math.abs(load)*.003*expression,-cycle*.006*localZ*expression]};
+ });
  state.time=time;state.x=u.x;state.z=u.z;state.y=u.y;state.yaw=u.yaw;
- return state.result=feet?{mode,feet,footYaw:state.feet.map(f=>wrap(f.yaw-u.yaw)),pitch:state.feet.map(f=>f.pitch),roll:state.feet.map(f=>f.roll),hipYaw:wrap(state.hipFacing-u.yaw),body:[localZ*.045*weight,-support*.032*weight,-support*.025*weight-localX*.025*weight],drop:(-.028-.009*(1-Math.cos(TAU*state.phase))*.5)*weight,shift:[support*.008*weight,0],armSwing:-support*.026*weight}:null;
+ return state.result=feet?{mode,feet,footYaw:state.feet.map(f=>wrap(f.yaw-u.yaw)),pitch:state.feet.map(f=>f.pitch),roll:state.feet.map(f=>f.roll),hipYaw:wrap(state.hipFacing-u.yaw)+twist*.025,body:[localZ*.10*weight,-twist*.085*expression,-load*.045*expression-localX*.060*weight],drop:(-.028-.009*(1-Math.cos(TAU*state.phase))*.5)*weight,shift:[load*.010,localZ*.006*weight],armSwing:-load*.036*localZ,arms}:null;
 }
