@@ -92,7 +92,7 @@ export function sampleLocomotion(ref,u,time,{groundAt}={}){
   state.weight=Math.max(0,state.weight-dt/.12);
  }
  const feet=state.started?state.feet.map(f=>localFoot(f.world,u)):null;
- const dir=state.direction||[Math.sin(u.yaw),Math.cos(u.yaw)],localX=Math.cos(u.yaw)*dir[0]-Math.sin(u.yaw)*dir[1],localZ=Math.sin(u.yaw)*dir[0]+Math.cos(u.yaw)*dir[1],support=(state.swing?1:-1)*Math.sin(Math.PI*state.phase),weight=state.weight;
+ const dir=state.direction||[Math.sin(u.yaw),Math.cos(u.yaw)],localX=Math.cos(u.yaw)*dir[0]-Math.sin(u.yaw)*dir[1],localZ=Math.sin(u.yaw)*dir[0]+Math.cos(u.yaw)*dir[1],support=(state.swing?-1:1)*Math.sin(Math.PI*state.phase),weight=state.weight;
  state.time=time;state.x=u.x;state.z=u.z;state.y=u.y;state.yaw=u.yaw;
- return state.result=feet?{mode,feet,footYaw:state.feet.map(f=>wrap(f.yaw-u.yaw)),pitch:state.feet.map(f=>f.pitch),roll:state.feet.map(f=>f.roll),body:[localZ*.045*weight,-support*.032*weight,support*.025*weight-localX*.025*weight],drop:(-.028-.009*Math.sin(Math.PI*state.phase))*weight,shift:[support*.008*weight,0],armSwing:support*.026*weight}:null;
+ return state.result=feet?{mode,feet,footYaw:state.feet.map(f=>wrap(f.yaw-u.yaw)),pitch:state.feet.map(f=>f.pitch),roll:state.feet.map(f=>f.roll),body:[localZ*.045*weight,-support*.032*weight,-support*.025*weight-localX*.025*weight],drop:(-.028-.009*Math.sin(Math.PI*state.phase))*weight,shift:[support*.008*weight,0],armSwing:-support*.026*weight}:null;
 }
