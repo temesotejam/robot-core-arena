@@ -209,26 +209,30 @@ test('溜め・必殺・再入力・4段目キックは初回命中の過去区�
 const otherWeaponPoses={
  sword:'49eb543fe5fd7e646819d99af734732e4dd6027eada5f4e3567cecaeee85b72d',rapier:'0856fe165f8c25c08ecf2901bcc15f472ba180744e53a6abde731f02f1650815',dualSword:'96e53b2422233b064b121635ff327ba674d356eeb31a1def8cde9b9febc5e5b5',lance:'a7b2507c1b7463f9351795ed8a1b492b07bc7cbc28b26a85b3f8fc960e5bf49c',naginata:'e15e28074860f9aa0d4cf7cd9d4f551f9013862431b23c0e3d836fe94a1bda22',dagger:'7943bcf19875898c8f7dd2d9a805bee89e876d8dc17c3f664de3bad398bf9259',hammer:'d7b3aa6d9f3232023efb8252e26ad86a33bb17e7afbd2d65b9289d89a03c0994',scythe:'22e75034328859609d029c3b7330bd935ee8c86ad83ce335e46493711da4a3ed',pistol:'16d6c178b96286c1f8f4431ee5b819c37ffa01f457f3251c77fa437d77e13932',machinegun:'83e3434111c3ec1cd5f762566e01ea763a83195eb1f1f5346a7fb6b0fc5b730c',shotgun:'9a2151ca74129208cdd140d9a0fa6308f29ab56b8afbf7c398bfe8c3cd8ca8d3',dualGun:'434456cc007b0031431282657845d8fe6f749a048ef850a9234b68480fd27b2e',rifle:'78a635e9decd3ece1e2080d5a0877b74a79e7af706fd2f960518219074319dfd',assault:'eaaa3ea6c54adc5f5133a68ef5fa1791437e0fd9e4050e39c28210d8711d243c',sniper:'50d0312e3e4166e147db5b19c16b9912fae6a881bb90e0c73a46f702d58ff619',heavyShotgun:'13784fe751d4dbc5b8e3a2f2e0130529e5c6bfad23b76e97e379221c3a63ae56',bazooka:'c64978d2331c420b58ef62255b23994d8678056617ec76647771df3393a0c594',missile:'53a21ccbdf770a341781ecff669a3efadf82d0787b54ef2d1563f1e5238e9cec',
 };
-// Captured before the kick was introduced. Panzer keeps all six punches;
+// Recorded from production commit 9b0600d, before the kick was introduced.
+// Round pose numbers to 12 decimals, as with the mesh matrices below: V8
+// versions may differ in the last bits of trigonometric results. This keeps
+// the physical regression threshold while avoiding a platform-specific hash.
+// Panzer keeps all six punches;
 // the five biped punches, charge, technique and hold keep the same authored
 // arm/body/foot poses too. This excludes metadata introduced for kick IK.
 const unchangedKnucklePoses={
- 0:'370b8eeab27ac366c1487ce371c843a6f5e8a09cac6e88e048363a902d1ab667',
- 1:'40b6f351b9232da4d669dbd95a976b2366913a517aeb93046562505ec953f78b',
- 2:'3867b1fcc5f2f31ce752ad4a4b8ef23cdbf7e4fcfe53df686fac214608b287cf',
- 3:'cf6083834c1f5791c525a65a7c58ccc7dcae74581ac429451f703ead1e2b86c3',
- 4:'7f0f04068c2f89f1cbc4e84352181c7851bbf7f03281aa3a3da26c35f648aa07',
- 5:'be93976399d0c4a2bbfba255397921ad740029193fabc5f9632b2d3049a6a2c3',
- charge:'86869d090a5c684b0de155e7fd554d12d7e165eeae14f9e9eb4355c307edc05c',
- tech:'e5f2c8e285dcd2bd91aa4aef32f8c1b97089e1577ce0c25a08f600174b19a884',
- hold:'63b481faf3f32bc16acbded7217bfda992ed371f266bf1fb0fca5147df67635f',
+ 0:'b525540bb8c8ac3278f27d1a082b9724c2460791ffea14bcaae01db49851b265',
+ 1:'1ae6c2ba78a57741151f95df0fbefaf1a63e4381e024b1bb599c4c18ac2eb4f2',
+ 2:'bf2f08ec6107736b2f5495fbf0dc8ddc5e2f45e4e99bca4abe60e4935caa1aa4',
+ 3:'84a84f12ffc50489ec52ecb29f8da50ff7f3e44e01d6b392dcbb1a908be77edf',
+ 4:'94528ec1ae52fa045b9bb650395c02fa3e689b18cb82d12ae36e37efd9d579f1',
+ 5:'b223e8064c5a37ef6efc56d1be020d8b3470d7d25e552243983cd584098ff10a',
+ charge:'378f59d51367dd94fd15dc260b8b901be2e2df96ed4e38975a63531102592d7a',
+ tech:'2c15a8a300173f903ff63066075dcb71101557e6979be90ffb689bfa80b60c7b',
+ hold:'86602bbcb9d5962fa6983bb989a1b9da3bb866aa59819d5b480976de00994bca',
 };
 test('キック追加でもPanzerの6パンチ・他の拳動作と他18武器の表示姿勢を変えない',()=>{
  for(const frame of frames)for(const [mode,expected]of Object.entries(unchangedKnucklePoses)){
   if(frame!=='panzer'&&mode==='3')continue;
   const hash=createHash('sha256');for(let n=0;n<=240;n++){
    const p=n/240,context={legFrame:frame},f=mode==='hold'?sampleMotion('knuckle',null,{...context,charging:{elapsed:p*.6,amount:p}}):sampleMotion('knuckle',{combo:Number.isNaN(Number(mode))?0:Number(mode),elapsed:p,duration:1,charge:mode==='charge'?1:0,skill:mode==='tech'?'tech':undefined},context);
-   hash.update(JSON.stringify([f.right,f.left,f.joints,f.body,f.head,f.hipYaw,f.drop,f.shift,f.feet,f.footYaw]));
+   hash.update(JSON.stringify([f.right,f.left,f.joints,f.body,f.head,f.hipYaw,f.drop,f.shift,f.feet,f.footYaw],(_key,value)=>typeof value==='number'?Number(value.toFixed(12)):value));
   }assert.equal(hash.digest('hex'),expected,`${frame}/${mode}: キック対象外の拳動作を変える`);
  }
 
