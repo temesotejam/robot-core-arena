@@ -8,7 +8,7 @@ const clamp=x=>Math.max(0,Math.min(1,x));
 const smooth=x=>{x=clamp(x);return x*x*(3-2*x);};
 const ramp=(p,a,b)=>smooth((p-a)/(b-a));
 const quaternion=r=>new THREE.Quaternion().setFromEuler(new THREE.Euler(...r));
-const baseFeet=[[-.145,.035,-.090],[.15,.035,.110]];
+const baseFeet=[[-.16,.035,-.105],[.16,.035,.125]];
 
 // A shape-preserving cubic keeps the rigid shaft moving through an impact
 // landmark. Only an actual reversal or the final carry settles to zero speed.
@@ -29,7 +29,7 @@ function landmark(hand,pitch,azimuth,sourceBody,body,hipYaw,drop,shift,weight,fo
  const position=new THREE.Vector3(...hand).sub(new THREE.Vector3(0,.36,0)).applyEuler(new THREE.Euler(...sourceBody)).add(new THREE.Vector3(0,.36,0));
  return {hand:position.toArray(),angles:[pitch+sourceBody[0],azimuth+sourceBody[1],sourceBody[2]],body,hipYaw,drop,shift,weight,footYaw};
 }
-const carry=landmark([.015,.58,.085],1.02,-.92,[.045,-.30,.025],[.045,-.30,.025],-.18,-.050,[-.012,-.015],0);
+const carry=landmark([.018,.48,.095],1.26,-1.12,[.065,-.40,.035],[.065,-.40,.035],-.24,-.065,[-.018,-.020],0);
 function pose(f){
  const inverse=quaternion(f.body).invert(),position=new THREE.Vector3(...f.hand).sub(new THREE.Vector3(0,.36,0)).applyQuaternion(inverse).add(new THREE.Vector3(0,.36,0)),
   shaft=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),f.angles[1])

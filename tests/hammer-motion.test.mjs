@@ -24,8 +24,10 @@ test('ハンマーの通常構えは肩外の斜めの柄、低い腰、前後�
   const w=ref.weaponAttachments[0],grip=point(w),head=w.localToWorld(new THREE.Vector3(0,.49,0)),axis=head.clone().sub(grip).normalize(),ready=sampleMotion('hammer',null);
   assert(Math.abs(head.x)>.28,'ヘッドを正面の中央へ立てる');
   assert(Math.hypot(axis.x,axis.z)>.80,'柄を竹刀のように縦へ構える');
+  assert(grip.y<.48&&head.y<.70,'握りとヘッドを胸前の高い位置へ残す');
   assert(Math.abs(ready.body[1])>.25&&ready.drop<-.045,'胸と腰が直立したまま');
   assert(ready.feet[1][0]-ready.feet[0][0]>.28&&ready.feet[1][2]-ready.feet[0][2]>.18,'足を前後に開かない');
+  if(frame!=='panzer'){const feet=ref.feet.map(leg=>point(leg.foot));assert(feet[1].x-feet[0].x>.30&&feet[1].z-feet[0].z>.21,'表示した脚が細い直立構えのまま');}
   assert(w.localToWorld(new THREE.Vector3(...w.userData.supportGrip)).distanceTo(point(ref.arms[1].hand))<.005,'左手が柄を支えない');
   const hand=point(ref.arms[0].hand);draw(ref,u,2);assert(hand.distanceTo(point(ref.arms[0].hand))<1e-8,'待機中に握りが漂う');
   assert(new THREE.Box3().setFromObject(ref.legGroup,true).min.y>=-1e-7,'待機の脚装甲が床を貫通');
