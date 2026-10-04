@@ -7,6 +7,7 @@ import {presentKnuckle} from './knuckle-motion.js';
 import {sampleLocomotion} from './locomotion.js';
 import {sampleLanding} from './landing-motion.js';
 import {HAMMER_GRIP} from './hammer-grip.js';
+import {meleePose} from './melee-pose.js';
 const mats=new Map(),boxes=new Map(),armorGeometries=new Map(),plateGeometries=new Map(),ankleGeometries=new Map();
 // Cached meshes share resources across robots. Release only scene-owned GPU
 // resources, once each, when a weapon or a complete scene is replaced.
@@ -89,7 +90,7 @@ function weaponModel(kind,team){const group=new THREE.Group(),w=WEAPONS[kind],me
   const muzzle=kind==='sniper'?size+.09:['shotgun','heavyShotgun'].includes(kind)?size+.09:kind==='bazooka'?.50:kind==='missile'?.46:size+.01,flash=new THREE.Mesh(new THREE.ConeGeometry(.055,.12,6),material(accent,true));flash.rotation.x=Math.PI/2;flash.position.set(0,.10,muzzle+.06);flash.visible=false;group.add(flash);group.userData.flash=flash;
  }
  if(w.ranged&&!w.shield&&!['dualGun'].includes(kind))group.userData.supportGrip=[.045,.065,.085];
- if(kind==='hammer'){group.userData.supportGrip=[...HAMMER_GRIP.support];group.userData.supportRoll=HAMMER_GRIP.supportRoll;}
+ if(kind==='hammer')group.userData.supportGrip=[...HAMMER_GRIP.support];
  else if(['naginata','scythe'].includes(kind))group.userData.supportGrip=[0,.09,0];
  if(!w.ranged){group.userData.trailTip=kind==='knuckle'?[0,0,.13]:kind==='dagger'?[0,.36,0]:kind==='hammer'?[...group.userData.strikeCenter]:['lance','naginata','scythe'].includes(kind)?[0,.80,0]:[0,kind==='rapier'?.72:.57,0];group.userData.trailBase=kind==='knuckle'?[0,0,.07]:[0,.10-(kind==='hammer'?HAMMER_GRIP.advance:0),0];}
  return group;
@@ -169,6 +170,10 @@ function supportWeapon(ref){
  const grip=ref.weaponAttachments[0].userData.supportGrip;if(!grip)return;
  const right=ref.arms[0],left=ref.arms[1],rotation=right.hand.rotation.clone();let support;
  for(let i=0;i<12;i++){support=new THREE.Vector3(...grip).applyEuler(rotation).add(right.hand.position).add(right.position);const reach=support.clone().sub(left.position),excess=reach.length()-.385;if(excess<=.0001)break;poseArm(right,right.hand.position.clone().add(right.position).addScaledVector(reach.normalize(),-excess),rotation);}
+ if(ref.kind==='hammer'){
+  const weapon=ref.weaponAttachments[0],shaft=right.hand.quaternion.clone().multiply(weapon.quaternion),e=new THREE.Euler().setFromQuaternion(shaft),frame=meleePose({right:{position:right.hand.position.clone().add(right.position).toArray(),rotation:[e.x,e.y,e.z]},twoHand:true,supportGrip:grip,shaftGrip:true});
+  poseSwordArm(right,frame.joints.right,true);poseSwordArm(left,frame.joints.left,true);weapon.quaternion.copy(right.hand.quaternion).invert().multiply(shaft);return;
+ }
  support=new THREE.Vector3(...grip).applyEuler(rotation).add(right.hand.position).add(right.position);const supportRotation=right.hand.quaternion.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),ref.weaponAttachments[0].userData.supportRoll||0));poseArm(left,support,new THREE.Euler().setFromQuaternion(supportRotation));
 }
 function recoveryPose(ref,u){
@@ -201,6 +206,7 @@ function poseWeapons(ref,u=null,time=0,locomotion=null,landing=null){
  let motion=sampleMotion(w.id,attack,{nextCombo:u?.queuedAttack?nextCombo(u,u.queuedAttack.charge,w):null,charging:u?.charging?u.chargePose:null,hasShield:!!ref.hasShield,legFrame:ref.legFrame});
  if(w.id==='knuckle')motion=presentKnuckle(ref,motion,{time,mode:attack||(u?.charging?'hold':null),enabled:!!u&&!u.dead&&!(u.down>0||u.rise>0||u.knockdown||u.statusTime>0||u.stun>0||u.guardBreak>0)});
  else delete ref.knucklePresentation;
+ if(w.id==='hammer')ref.weaponAttachments[0].quaternion.identity();
  const shot=u?.motion?.weapon===w.id&&w.ranged?u.motion:null,shotProgress=shot?THREE.MathUtils.clamp(shot.elapsed/shot.duration,0,1):0;
  const kick=kind=>({machinegun:.012,assault:.015,dualGun:.020,pistol:.028,shotgun:.035,rifle:.038,sniper:.050,heavyShotgun:.045,bazooka:.052,missile:.030})[kind]||.022;
  const pulse=p=>{if(p<=0||p>=1)return 0;const t=p<.24?p/.24:1-(p-.24)/.76;return t*t*(3-2*t);},recoil=shot?pulse(shotProgress)*kick(w.id):0;
@@ -213,7 +219,7 @@ function poseWeapons(ref,u=null,time=0,locomotion=null,landing=null){
    if(i===1&&ref.hasShield&&landing?.guard)joint=walkingJoint(joint,{rotation:[-.24*landing.guard,-.08*landing.guard,-.06*landing.guard],bend:.20*landing.guard,clavicle:[0,0,0]});
    poseSwordArm(arm,joint,w.id==='hammer');continue;
   }
-  const side=arm.userData.side,armed=i===0||dual,p=armed&&!w.ranged?(i?motion.left:motion.right):readyPose(w.id,side),target=new THREE.Vector3(...p.position),rotation=new THREE.Euler(...p.rotation);
+  const side=arm.userData.side,armed=i===0||dual,p=armed&&!w.ranged?(i?motion.left:w.id==='hammer'?motion.shaft:motion.right):readyPose(w.id,side),target=new THREE.Vector3(...p.position),rotation=new THREE.Euler(...p.rotation);
   if(armed&&w.ranged){const handRecoil=w.id==='dualGun'&&i===1?pulse((shotProgress-.12)/.88)*kick(w.id):recoil;target.z-=handRecoil;target.y+=handRecoil*.22;rotation.x=-handRecoil*(['pistol','shotgun','dualGun'].includes(w.id)?3.2:1.4);}
   if(!attack&&!w.ranged&&locomotion&&!u?.charging&&!u?.guard){target.z+=(locomotion.armSwing||0)*(i?-1:1);target.y+=(locomotion.arms?.[i]?.clavicle[1]||0);}
   if(u?.charging&&!w.ranged&&!attack&&i===0){target.y+=.10;rotation.x-=.6*Math.min(1,u.charge/(w.charge||1));}
@@ -221,6 +227,7 @@ function poseWeapons(ref,u=null,time=0,locomotion=null,landing=null){
   if(u?.guard){if(i===1)target.set(.18,w.id==='knuckle'?.68:.54,.25);else if(!w.ranged){target.set(-.23,w.id==='knuckle'?.68:.51,.21);rotation.x=w.id==='knuckle'?0:.75;}}
   poseArm(arm,target,rotation);
  }
+ if(w.id==='hammer'&&motion.shaftGrip&&!u?.guard&&!u?.dead&&!(u?.down>0))ref.weaponAttachments[0].quaternion.copy(ref.arms[0].hand.quaternion).invert().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...motion.shaft.rotation)));
  // Keep both wrists within reach while following a two-handed weapon.
  if(!(motion.twoHand&&(attack||motion.name==='chargeHold'||w.id==='hammer')&&!u?.guard&&!u?.dead&&!(u?.down>0)))supportWeapon(ref);
  if(shot){motion.body[0]-=recoil*2;motion.drop=-recoil*.25;motion.shift[1]-=recoil*.6;}

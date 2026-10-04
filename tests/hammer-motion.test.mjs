@@ -7,6 +7,7 @@ import {defaultConfig} from '../src/customize.js';
 import {CATALOG,PARTS} from '../src/data.js';
 import {Battle} from '../src/sim.js';
 import {HAMMER_GRIP} from '../src/hammer-grip.js';
+import {swordArm} from '../src/sword-motion.js';
 
 const frames=['knight','strider','wild','brawler','panzer'];
 function fixture(frame='knight'){
@@ -51,6 +52,11 @@ test('大型ハンマーを腰の横から後ろへ低く構え、肩を前へ�
   const w=ref.weaponAttachments[0],grip=point(w),head=w.localToWorld(new THREE.Vector3(...w.userData.strikeCenter)),axis=head.clone().sub(grip).normalize(),ready=sampleMotion('hammer',null);
   assert(head.x<-.24,'ヘッドを体の横の外へ置かない');
   assert(axis.z<-.80&&axis.y<-.10,'柄を低い後方へ向けない');
+  const approved=new THREE.Vector3(Math.sin(1.77)*Math.sin(-2.80),Math.cos(1.77),Math.sin(1.77)*Math.cos(-2.80));
+  assert(axis.distanceTo(approved)<1e-9,'了承された下段構えから柄の方向を変える');
+  const approvedHead=new THREE.Vector3(1,0,0).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),approved).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI/2)));
+  assert(new THREE.Vector3(1,0,0).transformDirection(w.matrixWorld).distanceTo(approvedHead)<1e-9,'了承された構えからヘッドを回す');
+  for(const arm of ref.arms){const neutral=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2),wrist=arm.lower.quaternion.clone().invert().multiply(arm.hand.quaternion);assert(wrist.angleTo(neutral)<=18*Math.PI/180+1e-7,'通常構えで手首を折り過ぎる');}
   assert(head.y<grip.y-.075&&head.y>.28&&head.z<point(ref.arms[1].hand).z-.45,'肩に担ぐか、正面へ構える');
   assert(grip.y>.42&&grip.y<.52,'両手の握りを腰の高さへ下げない');
   const crossbar=w.localToWorld(new THREE.Vector3(.245,.60,0)).sub(w.localToWorld(new THREE.Vector3(-.245,.60,0))).normalize();
@@ -77,8 +83,11 @@ test('右手をヘッド側、左手を柄の端側に置き、両手が重な�
    assert(w.localToWorld(new THREE.Vector3(...w.userData.supportGrip)).distanceTo(left)<1e-7,'支持側の手が柄から離れる');
    const axis=new THREE.Vector3(0,1,0).transformDirection(w.matrixWorld),handAxis=new THREE.Vector3(0,1,0).transformDirection(ref.arms[1].hand.matrixWorld);
    assert(axis.dot(handAxis)>.999999,'支持側の握りが柄に対して折れる');
-   const palm=hand=>new THREE.Vector3(0,0,1).transformDirection(hand.matrixWorld);
-   assert(palm(ref.arms[0].hand).dot(palm(ref.arms[1].hand))<-.999999,'両手の掌を同じ向きへねじる');
+   for(const arm of ref.arms){
+    const wrist=arm.lower.quaternion.clone().invert().multiply(arm.hand.quaternion),neutral=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2),bend=wrist.clone().multiply(neutral.invert());
+    assert(wrist.angleTo(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2))<=35*Math.PI/180+1e-7,'手首が前腕から逆向きに折れる');
+    assert(Math.hypot(bend.y,bend.z)<1e-7,'前腕の回転を手首のねじれへ押し込む');
+   }
    // Both ends of the supporting fist must surround the physical solid haft.
    const haft=w.children[1];haft.geometry.computeBoundingBox();for(const y of [-.0325,.0325]){
     const end=haft.worldToLocal(ref.arms[1].hand.localToWorld(new THREE.Vector3(0,y,0)));
@@ -98,6 +107,17 @@ test('大剣風の通常2段は腰が先行し、反対の肩から斜めに振�
   const {ref,u}=fixture(),head=p=>{u.attack={id:'diagonal',weapon:'hammer',combo,elapsed:p,duration:1,origin:[0,0,0],yaw:0};draw(ref,u,p);return ref.weaponAttachments[0].localToWorld(new THREE.Vector3(...ref.weaponAttachments[0].userData.strikeCenter));},load=head(.225),follow=head(.56),side=combo===0?-1:1;
   assert(load.x*side>.20&&follow.x*side<-.25,'2段とも同じ側で小さく振る');
   assert(load.y-follow.y>.50,'ヘッドを横一線で回すだけ');
+ }
+});
+
+test('前腕と握りは構えから攻撃・回収まで一瞬で反転しない',()=>{
+ for(const [combo,charge]of [[0,0],[1,0],[0,1]]){
+  let before;
+  for(let n=0;n<=1000;n++){
+   const frame=sample(combo,n/1000,charge),arms=['right','left'].map(side=>swordArm(frame.joints[side]));
+   if(before)for(let i=0;i<2;i++)for(const key of ['upper','lower','hand'])assert(arms[i][key].angleTo(before[i][key])<8*Math.PI/180,`${combo}/${charge}/${n}/ ${key}: 肘・前腕・握りの解が反転する`);
+   before=arms;
+  }
  }
 });
 
@@ -148,6 +168,7 @@ test('実入力の2段・満溜めで全5フレームの腕装甲・脚・大型
    const rt=b.runtime(u),a=u.attack,input={},first=n>=fps*.5&&!starts&&!a&&!u.motion&&held<holdFrames,follow=a&&a.combo<stages-1&&u.comboHit&&!u.queuedAttack&&rt.cooldown<=.14&&rt.cooldown>0;
    if(charged){if(first){input.attack=true;held++;}}else if(pressing)pressing=false;else if(first||follow){input.attack=true;pressing=true;held++;}
    b.tick(1/fps,input);b.consumeEvents();draw(ref,u,b.time);
+   for(const arm of ref.arms){const neutral=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2),wrist=arm.lower.quaternion.clone().invert().multiply(arm.hand.quaternion);assert(wrist.angleTo(neutral)<=35*Math.PI/180+1e-7,`${frame}/${fps}/${mode}/${u.attack?.combo}/${u.attack&&u.attack.elapsed/u.attack.duration}: 手首を無理な角度に折る`);}
    clearArms(ref,torso,`${frame}/${fps}/${mode}/${u.attack?.combo}/${u.attack&&u.attack.elapsed/u.attack.duration}`);
    const bottom=new THREE.Box3().setFromObject(ref.legGroup,true).min.y;
    assert(bottom>=-1e-7,`${frame}/${fps}/${mode}/${u.attack?.combo}/${u.attack&&u.attack.elapsed/u.attack.duration}: 脚の装甲が床へ${-bottom}入る`);

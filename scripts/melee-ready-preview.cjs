@@ -43,15 +43,19 @@ let browser;
      window.readyImage=view=>{
       // The shared camera must also fit the old horizontal hammer from its
       // near side, including the conservative corners of its full bounds.
-      const side=kind==='hammer'?-1:1,cameras={front:[0,1.10,3.30],side:[side*3.30,1.10,0],threequarter:[side*2.4,1.20,2.5]};r.camera.position.set(...cameras[view]);r.camera.lookAt(0,.60,0);r.camera.updateMatrixWorld(true);
-      const box=new THREE.Box3();ref.root.traverse(o=>{if(o.isMesh&&o.visible&&o!==ref.ring&&!ref.weaponTrails.some(t=>t.mesh===o))box.expandByObject(o);});
+      const side=kind==='hammer'?-1:1,cameras={front:[0,1.10,3.30],side:[side*3.30,1.10,0],threequarter:[side*2.4,1.20,2.5],wrists:[-1.0,.84,1.25]};r.camera.position.set(...cameras[view]);r.camera.lookAt(...(view==='wrists'?[-.17,.55,.22]:[0,.60,0]));r.camera.updateMatrixWorld(true);
+      const box=new THREE.Box3();ref.root.traverse(o=>{
+       if(!o.isMesh||!o.visible||o===ref.ring||ref.weaponTrails.some(t=>t.mesh===o))return;
+       if(view==='wrists'){let p=o;for(;p&&!ref.arms.includes(p);p=p.parent)if(ref.weaponAttachments.includes(p))return;if(!p)return;}
+       box.expandByObject(o);
+      });
       let clipped=false;for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]){const p=new THREE.Vector3(x,y,z).project(r.camera);if(Math.abs(p.x)>.97||Math.abs(p.y)>.97)clipped=true;}
       r.renderer.render(r.scene,r.camera);return {pixels:r.canvas.toDataURL('image/png').split(',')[1],clipped,glError:r.renderer.getContext().getError(),contextLost:!!r.contextLost};
      };
      return values;
     },{kind,frame});
     assert(measurements.supportError<.005);if(version==='after')assert(measurements.minLegGeometry>=-1e-7);
-    for(const view of ['front','side','threequarter']){
+    for(const view of ['front','side','threequarter',...(kind==='hammer'?['wrists']:[])]){
      const result=await page.evaluate(view=>window.readyImage(view),view);
      report.lastCapture={version,frame,view,clipped:result.clipped,glError:result.glError,contextLost:result.contextLost};
      assert.equal(result.clipped,false,`${version}/${frame}/${view}: model bounds leave the image`);assert.equal(result.glError,0);assert.equal(result.contextLost,false);
