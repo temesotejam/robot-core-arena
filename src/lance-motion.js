@@ -39,11 +39,11 @@ function facingHand(position,pitch,yaw,body,roll=0){
 }
 function pose({hand=readyHand,pitch=1.34,aim=.27,body=[.025,-.26,.015],hipYaw=-.10,drop=-.045,shift=[0,-.008],weight=0,
  shield=[.215,.59,.245],free=[.255,.59,.045],footStep=0,rearStep=0,footYaw=[-.05,.18]}={},hasShield=false){
- return meleePose({right:facingHand(hand,pitch,aim,body),
+ return {...meleePose({right:facingHand(hand,pitch,aim,body),
   left:hasShield?facingHand(shield,.02,-.10,body,-.08):facingHand(free,.14,-.13,body,-.12),
   body,head:[-body[0]*.85,-body[1]*.94,-body[2]*.7],hipYaw,drop,shift,weight,
   feet:baseFeet.map((v,i)=>[v[0],v[1],v[2]+(i?rearStep:footStep)]),footYaw,
-  poles:[[-.62,-.18,.06],[.55,-.20,.12]],hasShield});
+  poles:[[-.62,-.18,.06],[.55,-.20,.12]],hasShield}),tailClearance:true};
 }
 const ready=pose(),shieldReady=pose({},true);
 const recipes=[
@@ -68,18 +68,19 @@ function sampled(r,p,hasShield){
  // shield covers the front during the separate elbow/shaft fold on recovery.
  return pose({hand,pitch:angles[0],aim:angles[1],body,hipYaw:-.10-.19*preload+r.hipTurn*hip,
   drop:-.045-r.sink*sink,shift:[-.018*hip,-.008-.022*preload+r.shift*chest],weight:Math.max(hip,chest),
-  shield:guard,free,footStep:r.step*chest,rearStep:-.018*preload,
+  shield:guard,free,footStep:r.step*pulse(p,.04,.29,.55,r.stepEnd??.95),rearStep:-.018*preload,
   footYaw:[-.05+.10*hip,.18+.20*hip]},hasShield);
 }
 function makeClip(r){
  const sample=(p,hasShield=false)=>sampled(r,p,hasShield),load=r.load??.22;
  return {name:r.name,stage:r.stage,contact:r.contact||{start:.34,center:.455,end:.51},
+  footwork:r.footwork||{land:.31,rearLand:.64,lift:.075},
   sample,prepare:sample(load),shieldPrepare:sample(load,true),load,
   keys:[[0,ready],[load,sample(load)],[.455,sample(.455)],[.65,sample(.65)],[1,ready]],
   shieldKeys:[[0,shieldReady],[load,sample(load,true)],[.455,sample(.455,true)],[.65,sample(.65,true)],[1,shieldReady]]};
 }
 const clips=recipes.map(makeClip);
-const charged=makeClip({...recipes[2],stage:undefined,load:.26,hit:.46,contact:{start:.36,center:.46,end:.51}});
+const charged=makeClip({...recipes[2],stage:undefined,load:.26,hit:.46,stepEnd:.72,contact:{start:.36,center:.46,end:.51},footwork:{land:.31,rearLand:.44,gatherEnd:.72,lift:.080}});
 function sampleClip(clip,p,start,{hasShield=false}={}){
  const prepare=hasShield?clip.shieldPrepare:clip.prepare;
  if(p<=0)return start;

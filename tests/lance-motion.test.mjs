@@ -5,12 +5,15 @@ import {sampleMotion} from '../src/motion.js';
 import {createRobot,ArenaRenderer} from '../src/render.js';
 import {defaultConfig} from '../src/customize.js';
 import {CATALOG} from '../src/data.js';
+import {PARTS} from '../src/data.js';
+import {Battle} from '../src/sim.js';
 
-function fixture(shield=true){
+function fixture(shield=true,frame='knight'){
  const config=defaultConfig();config.sets[0]={item:'weapon:lance',shield:shield?'shield:basic':null,separate:false};
+ config.armor=Object.fromEntries(PARTS.map(p=>[p,`armor:${frame}:${p}`]));
  const ref=createRobot(config,id=>CATALOG[id]);ref.active=0;
  const u={config,active:0,x:0,y:0,z:0,yaw:0,grounded:true};
- return {ref,u};
+ return {config,ref,u};
 }
 function draw(ref,u,combo,p,charge=0){
  u.attack={id:`${combo}`,weapon:'lance',combo,charge,elapsed:p,duration:1,origin:[0,0,0],yaw:0};
@@ -31,6 +34,32 @@ test('ランスは腰を先行させて胸を回し、低・高・最終突き�
  const low=sample(0,.22),high=sample(1,.22),finish=sample(2,.48);
  assert(high.right.position[1]-low.right.position[1]>.20,'高い突きも腰横の引きになる');
  assert(finish.body[0]>.13&&finish.shift[1]>.06&&finish.drop<-.105,'最終突きに前傾と深い荷重がない');
+});
+
+test('実入力の連撃・近距離と空振りの溜めで、全5フレームのすね装甲と足が床を貫通しない',()=>{
+ for(const frame of ['knight','strider','wild','brawler','panzer'])for(const fps of [30,60,120])for(const mode of ['combo','chargeNear','chargeFar']){
+  const {config,ref}=fixture(true,frame);config.passives=[];config.abilities=[];
+  const enemy=defaultConfig(0,true);enemy.passives=[];enemy.abilities=[];
+  const b=new Battle({allies:[config],enemies:[enemy],setup:{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true},getItem:id=>CATALOG[id],rng:()=>.99});
+  b.countdown=0;b.training.freezeAI=true;
+  const u=b.human,v=b.entities[1],charged=mode!=='combo',stages=charged?1:3,holdFrames=charged?Math.ceil(b.maxCharge(u)*fps)+1:1;
+  Object.assign(u,{x:0,z:0,yaw:0,target:v.id});Object.assign(v,{x:0,z:mode==='chargeFar'?5:.9,yaw:Math.PI});
+  let starts=0,held=0,pressing=false,ended=null,inspected=0;
+  const attack=b.attack.bind(b);b.attack=(unit,...args)=>{const ok=attack(unit,...args);if(ok&&unit===u)starts++;return ok;};
+  for(let n=0;n<fps*8;n++){
+   const rt=b.runtime(u),a=u.attack,input={},first=n>=fps*.5&&!starts&&!a&&!u.motion&&held<holdFrames,
+    follow=a&&a.combo<stages-1&&u.comboHit&&!u.queuedAttack&&rt.cooldown<=.14&&rt.cooldown>0;
+   if(charged){if(first){input.attack=true;held++;}}
+   else if(pressing)pressing=false;else if(first||follow){input.attack=true;pressing=true;held++;}
+   b.tick(1/fps,input);b.consumeEvents();ArenaRenderer.prototype.animateRobot.call({},ref,u,b.time,(x,z)=>b.groundAt(x,z));ref.root.updateMatrixWorld(true);
+   // Precise vertices, including bevels and accent plates, are the visible
+   // casing. An ankle-position check alone missed the former shin penetration.
+   const bottom=new THREE.Box3().setFromObject(ref.legGroup,true).min.y;
+   assert(bottom>=-1e-7,`${frame}/${fps}/${mode}/${u.attack?.combo}/${u.attack&&u.attack.elapsed/u.attack.duration}: 脚の装甲が床へ${-bottom}入る`);inspected++;
+   if(starts===stages&&!u.attack&&!u.motion){ended??=b.time;if(b.time-ended>=.25)break;}
+  }
+  assert.equal(starts,stages);assert(inspected>fps);assert(ended!==null);
+ }
 });
 
 test('回る胸に対して槍先を相手へ向け、盾は正面を覆ったまま別に回収する',()=>{

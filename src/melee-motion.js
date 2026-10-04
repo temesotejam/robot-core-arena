@@ -61,14 +61,15 @@ export function sampleMelee(kind,attack,{nextCombo=null,charging=null,hasShield=
   feet[0][1]=.035+.018*Math.sin(Math.PI*gather);
   return {...out,name:clip.name,strikingSide:clip.strikingSide,strikingLimb:clip.strikingLimb,feet,footStride,footProgress,plantOrigin:attack.origin,plantYaw:attack.yaw};
  }
- const lift=kind==='knuckle'?.006:.026,liftStart=contact.start*.28,
-  land=out.twoHand?contact.start*(attack.charge>.5?.8:1):kind==='lance'?contact.start+(contact.center-contact.start)*(attack.charge>.5?.82:.65):contact.center,rearLand=kind==='lance'?.70:.82;
+ const lift=clip.footwork?.lift??(kind==='knuckle'?.006:.026),liftStart=contact.start*.28,
+  land=clip.footwork?.land??(out.twoHand?contact.start*(attack.charge>.5?.8:1):kind==='lance'?contact.start+(contact.center-contact.start)*(attack.charge>.5?.82:.65):contact.center),rearLand=clip.footwork?.rearLand??(kind==='lance'?.70:.82);
  const feet=out.feet.map(v=>[...v]),footStride=[0,0],footProgress=[0,0],stepStart=contact.start*(['rapier','lance'].includes(kind)?1.15:.5);
+ const footLift=t=>t<=0||t>=1?0:lift*Math.sin(Math.PI*t);
  // One support foot remains planted. The driving foot lifts and lands before
  // the impact; the rear foot then gathers during recovery, without sliding.
  footProgress[lead]=ramp(p,liftStart,land);footProgress[rear]=ramp(p,land,rearLand);
- feet[lead][1]=.035+lift*Math.sin(Math.PI*footProgress[lead]);
- feet[rear][1]=.035+lift*Math.sin(Math.PI*footProgress[rear]);
+ feet[lead][1]=.035+footLift(footProgress[lead]);
+ feet[rear][1]=.035+footLift(footProgress[rear]);
  // Land at the travel already completed, rather than reaching the full attack
  // advance early. Once it lands, the other foot may gather.
  footStride[lead]=ramp(land,stepStart,contact.end)*footProgress[lead];
@@ -77,8 +78,8 @@ export function sampleMelee(kind,attack,{nextCombo=null,charging=null,hasShield=
  // Both footprints then finish in the same stance used by the idle pose;
  // dropping the retained attack pose cannot teleport a planted foot.
  if(p>rearLand){
-  const gather=ramp(p,rearLand,1),impactStride=ramp(land,stepStart,contact.end);
-  footProgress[lead]=gather;feet[lead][1]=.035+lift*Math.sin(Math.PI*gather);
+  const gather=ramp(p,rearLand,clip.footwork?.gatherEnd??1),impactStride=ramp(land,stepStart,contact.end);
+  footProgress[lead]=gather;feet[lead][1]=.035+footLift(gather);
   footStride[lead]=impactStride+(1-impactStride)*gather;
  }
  if(p<=0){for(let i=0;i<2;i++)feet[i]=[...start.feet[i]];}

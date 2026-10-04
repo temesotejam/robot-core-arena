@@ -6,11 +6,11 @@ import {swordArm} from './sword-motion.js';
 import {presentKnuckle} from './knuckle-motion.js';
 import {sampleLocomotion} from './locomotion.js';
 import {sampleLanding} from './landing-motion.js';
-const mats=new Map(),boxes=new Map(),armorGeometries=new Map(),plateGeometries=new Map();
+const mats=new Map(),boxes=new Map(),armorGeometries=new Map(),plateGeometries=new Map(),ankleGeometries=new Map();
 // Cached meshes share resources across robots. Release only scene-owned GPU
 // resources, once each, when a weapon or a complete scene is replaced.
 function releaseObject(root){
- const sharedGeometry=new Set([...boxes.values(),...armorGeometries.values(),...plateGeometries.values()]),sharedMaterial=new Set(mats.values()),geometry=new Set(),materials=new Set();
+ const sharedGeometry=new Set([...boxes.values(),...armorGeometries.values(),...plateGeometries.values(),...ankleGeometries.values()]),sharedMaterial=new Set(mats.values()),geometry=new Set(),materials=new Set();
  root.traverse(o=>{if(o.geometry&&!sharedGeometry.has(o.geometry))geometry.add(o.geometry);for(const m of Array.isArray(o.material)?o.material:o.material?[o.material]:[])if(!sharedMaterial.has(m))materials.add(m);});
  for(const g of geometry)g.dispose();for(const m of materials)m.dispose();
 }
@@ -20,6 +20,21 @@ function profile(points,depth,bevel=0){const shape=new THREE.Shape();points.forE
 function plate(points,depth,color,x=0,y=0,z=0,bevel=0){
  const key=JSON.stringify([points,depth,bevel]);if(!plateGeometries.has(key))plateGeometries.set(key,profile(points,depth,bevel));
  const mesh=new THREE.Mesh(plateGeometries.get(key),material(color));mesh.position.set(x,y,z);mesh.castShadow=true;mesh.receiveShadow=true;return mesh;
+}
+function anklePlate(points,depth,color,x=0,y=0,z=0,bevel=0){
+ const mesh=plate(points,depth,color,x,y,z,bevel),key=`${mesh.geometry.uuid}/${x}/${y}/${z}`;
+ if(!ankleGeometries.has(key)){
+  const geometry=mesh.geometry.clone(),positions=geometry.attributes.position;
+  // Keep the long shin and upper casing, while tapering its ankle end so a
+  // bent leg's casing clears the boot and floor. Bone lengths stay unchanged.
+  for(let i=0;i<positions.count;i++){
+   const boneY=positions.getY(i)+y,t=THREE.MathUtils.smoothstep(boneY,-SHIN-.008,-SHIN+.115),factor=.28+.72*t;
+   positions.setX(i,(positions.getX(i)+x)*(.85+.15*t)-x);
+   positions.setZ(i,(positions.getZ(i)+z)*factor-z);
+  }
+  geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();ankleGeometries.set(key,geometry);
+ }
+ mesh.geometry=ankleGeometries.get(key);return mesh;
 }
 function armor(w,h,d,color,x=0,y=0,z=0){
  const key=`${w},${h},${d}`;if(!armorGeometries.has(key)){const bevel=Math.min(w,h,d)*.12,hw=w/2-bevel,hh=h/2-bevel,corner=Math.min(hw,hh)*.22,shape=new THREE.Shape();
@@ -232,14 +247,14 @@ export function createRobot(config,getItem,team=0){const root=new THREE.Group(),
    const tw=legFrame==='brawler'?.056:legFrame==='wild'?.052:legFrame==='strider'?.036:.043;
    leg.upper=new THREE.Group();leg.upper.add(box(.047,THIGH,.055,'#263442',0,-THIGH/2,0),plate([[-tw,.043],[tw,.043],[tw*.80,-.052],[-tw*.80,-.052]],.095,legColor,0,-.083,0,.006));
    leg.knee=new THREE.Group();leg.knee.add(sphere(.037,'#263442',0,0,0),plate([[-tw*1.28,.032],[tw*1.28,.032],[tw*1.16,-.018],[0,-.040],[-tw*1.16,-.018]],.063,legAccent,0,.001,.047,.006));
-   leg.lower=new THREE.Group();const shin=legFrame==='wild'?.081:legFrame==='brawler'?.076:legFrame==='strider'?.053:.067;leg.lower.add(box(.047,SHIN,.055,'#263442',0,-SHIN/2,0),plate([[-shin*.75,.086],[shin*.75,.086],[shin,.033],[shin*.81,-.070],[shin*.56,-.093],[-shin*.56,-.093],[-shin*.81,-.070],[-shin,.033]],.130,legColor,0,-.129,0,.008),plate([[-.019,.059],[.019,.059],[.011,-.054],[-.011,-.054]],.016,legAccent,0,-.124,.074,.003));
+   leg.lower=new THREE.Group();const shin=legFrame==='wild'?.081:legFrame==='brawler'?.076:legFrame==='strider'?.053:.067;leg.lower.add(box(.047,SHIN,.055,'#263442',0,-SHIN/2,0),anklePlate([[-shin*.75,.086],[shin*.75,.086],[shin,.033],[shin*.81,-.070],[shin*.56,-.093],[-shin*.56,-.093],[-shin*.81,-.070],[-shin,.033]],.130,legColor,0,-.129,0,.008),anklePlate([[-.019,.059],[.019,.059],[.011,-.054],[-.011,-.054]],.016,legAccent,0,-.124,.074,.003));
    const boot=legFrame==='wild'?.168:legFrame==='brawler'?.164:legFrame==='strider'?.134:.148;
    leg.foot=new THREE.Group();leg.foot.add(armor(boot,.064,legFrame==='strider'?.235:.220,'#263442',0,0,.045),plate([[-boot*.38,.034],[boot*.38,.034],[boot*.48,.001],[boot*.47,-.013],[-boot*.47,-.013],[-boot*.48,.001]],.145,legColor,0,.024,.055,.004),armor(boot*.78,.016,.045,legAccent,0,.027,.110));
    leg.add(leg.upper,leg.knee,leg.lower,leg.foot);
-   if(legFrame==='strider'){const fin=plate([[-.012,-.09],[.015,-.09],[.025,.14],[-.01,.04]],.035,legAccent,side*.065,-.075,-.045);leg.lower.add(fin);}
+   if(legFrame==='strider'){const fin=anklePlate([[-.012,-.09],[.015,-.09],[.025,.14],[-.01,.04]],.035,legAccent,side*.065,-.075,-.045);leg.lower.add(fin);}
   }legs.add(leg);refs.feet.push(leg);
  }
- if(legFrame==='wild'){const tail=box(.045,.045,.3,legAccent,0,.2,-.24);tail.rotation.x=-.25;legs.add(tail);}const ring=new THREE.Mesh(new THREE.RingGeometry(.35,.38,32),new THREE.MeshBasicMaterial({color:teamColor,transparent:true,opacity:.65,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.015;root.add(ring);refs.ring=ring;
+ if(legFrame==='wild'){const tail=box(.045,.045,.3,legAccent,0,.2,-.24);tail.rotation.x=-.25;legs.add(tail);refs.tail=tail;}const ring=new THREE.Mesh(new THREE.RingGeometry(.35,.38,32),new THREE.MeshBasicMaterial({color:teamColor,transparent:true,opacity:.65,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.015;root.add(ring);refs.ring=ring;
  refs.addWeapons=(set)=>{const kind=getItem(set.item).kind,wm=weaponModel(kind,team);refs.arms[0].hand.add(wm);refs.weaponAttachments=[wm];refs.hasShield=false;
   if(['dualSword','dualGun','knuckle'].includes(kind)){const left=weaponModel(kind,team);refs.arms[1].hand.add(left);refs.weaponAttachments.push(left);}
   else if(set.shield&&WEAPONS[kind].shield){const shield=new THREE.Group();shield.name='shield';shield.add(armor(.19,.3,.035,bodyColor,0,.055,.06),glow(.025,.22,.04,teamColor,0,.055,.085));refs.arms[1].hand.add(shield);refs.weaponAttachments.push(shield);refs.hasShield=true;}
@@ -300,6 +315,7 @@ export class ArenaRenderer{
     settle=Math.max(settle,-ankle.y-vertical);
    }settle=Math.min(locomotion?.15:.10,settle);ref.legGroup.position.y-=settle;ref.bodyPivot.position.y-=settle;
   }
+  if(ref.tail)ref.tail.position.y=.2+(motion.tailClearance&&canPose&&u.grounded?Math.max(0,-ref.legGroup.position.y-.13):0);
   for(const [i,leg]of ref.feet.entries())if(leg.knee){const foot=footTargets[i].clone().sub(ref.legGroup.position).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw),pole=motion.kneePoles?.[i]?new THREE.Vector3(...motion.kneePoles[i]).applyAxisAngle(new THREE.Vector3(0,1,0),-hipYaw).toArray():null;poseLeg(leg,foot,pole);leg.foot.rotation.set(locomotion?.pitch[i]??motion.footPitch?.[i]??0,(locomotion?.footYaw[i]??motion.footYaw[i]??0)-hipYaw+(canPose&&u.grounded&&motion.plantOrigin&&!u.guard?(motion.plantYaw??facing)-facing:0),locomotion?.roll[i]??motion.footRoll?.[i]??0);}
   const head=motion.head||[-motion.body[0]*(motion.sword?.65:.20),-motion.body[1]*(motion.sword?.75:.28),0];
   ref.head.rotation.set(canPose?head[0]-(locomotion?.body[0]||0)*.65+(landing?.head[0]||0):0,canPose?head[1]-(locomotion?.body[1]||0)*.9:0,canPose?head[2]-(locomotion?.body[2]||0)*.7+(landing?.head[2]||0):0);recoveryPose(ref,u);ref.ring.material.opacity=u.buffTime>0?.85:.45;updateTrails(ref,u,time,motion.name,motion.strikingSide,motion.strikingLimb);
