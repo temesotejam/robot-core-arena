@@ -1,10 +1,7 @@
 import * as THREE from '../vendor/three.module.min.js';
 import {meleePose} from './melee-pose.js';
 
-// Original poses. The lance's separate shield, folded weapon elbow and low
-// recovery are informed by the visible long-shaft + kite-shield fighter in
-// W episode 14 (15:37.4–15:40.9) and episode 19 (16:37.2–16:38.6).
-// The latter is airborne: its feet are not used as ground-foot timing data.
+// Original rapier poses. Lance choreography lives in lance-motion.js.
 // A rapier was not positively identified in those excerpts. Its point-first
 // extension and rear-leg drive use fencing as a movement reference instead.
 const RAP_FEET=[[-.12,.035,.095],[.13,.035,-.085]];
@@ -99,40 +96,6 @@ const rapierClips=[
  ]],
 ].map(([name,poses])=>clip('rapier',name,poses,rapierReady,rapierShieldReady));
 
-const lanceReady=frame('lance'),lanceShieldReady=frame('lance',{},true);
-// Heavier linear attacks: lower/raise the weapon with the shoulder and folded
-// elbow, show the shield first, then drive the grip behind an aligned point.
-// Its third stage has a deeper stance and a longer guard-gathering recovery.
-const lanceClips=[
- ['lowThrust',[
-  [.10,{hand:[-.275,.455,.11],pitch:1.59,body:[.014,-.24,.012],hip:-.19,drop:-.048,shift:[.007,-.018],free:[.245,.58,.045],shield:[.205,.585,.25],weight:.38}],
-  [.20,{hand:[-.275,.45,.125],pitch:1.63,body:[.025,-.27,.014],hip:-.13,drop:-.075,shift:[.008,-.021],free:[.24,.59,.015],shield:[.20,.59,.265],weight:.66}],
-  [.24,{hand:[-.26,.455,.18],pitch:1.62,body:[.027,-.23,.013],hip:-.015,drop:-.074,shift:[.007,-.012],free:[.25,.59,-.015],shield:[.215,.575,.255],weight:.78}],
-  [.37,{hand:[-.23,.46,.285],pitch:1.60,aim:.28,body:[.031,-.075,.006],hip:.15,drop:-.076,shift:[.003,.017],step:.055,lift:.016,free:[.27,.58,-.10],shield:[.24,.555,.24],weight:.94}],
-  [.51,{hand:[-.215,.47,.31],pitch:1.60,aim:.28,body:[.033,.025,-.008],hip:.22,drop:-.077,shift:[0,.046],step:.11,free:[.28,.56,-.135],shield:[.255,.55,.23],weight:1}],
-  [.72,{hand:[-.26,.465,.195],pitch:1.56,body:[.02,-.06,-.001],hip:.09,drop:-.060,shift:[.003,.021],step:.075,free:[.265,.575,-.04],shield:[.235,.56,.24],weight:.57}],
-  [.88,{hand:[-.265,.48,.15],pitch:1.50,body:[.012,-.12,.002],hip:-.025,drop:-.040,step:.025,lift:.012,free:[.255,.585,.03],shield:[.225,.56,.24],weight:.25}],
- ]],
- ['highThrust',[
-  [.10,{hand:[-.275,.60,.11],pitch:1.08,body:[-.01,-.20,.015],hip:-.17,drop:-.045,shift:[.007,-.017],free:[.245,.61,.055],shield:[.205,.60,.24],weight:.36}],
-  [.20,{hand:[-.27,.62,.12],pitch:1.24,body:[-.013,-.235,.015],hip:-.11,drop:-.062,shift:[.007,-.022],free:[.24,.62,.025],shield:[.205,.615,.245],weight:.64}],
-  [.24,{hand:[-.255,.625,.175],pitch:1.36,body:[-.015,-.20,.013],hip:.005,drop:-.061,shift:[.005,-.014],free:[.25,.61,-.005],shield:[.225,.60,.235],weight:.76}],
-  [.37,{hand:[-.22,.625,.30],pitch:1.45,aim:.25,body:[-.012,-.06,.004],hip:.14,drop:-.048,shift:[.002,.019],step:.045,lift:.015,free:[.28,.58,-.09],shield:[.25,.575,.21],weight:.94}],
-  [.51,{hand:[-.205,.63,.345],pitch:1.47,aim:.255,body:[-.008,.015,-.008],hip:.21,drop:-.044,shift:[-.002,.042],step:.095,free:[.29,.55,-.125],shield:[.26,.565,.205],weight:1}],
-  [.72,{hand:[-.255,.59,.19],pitch:1.28,body:[-.005,-.055,.002],hip:.075,drop:-.047,shift:[0,.019],step:.055,free:[.265,.59,-.025],shield:[.235,.585,.225],weight:.55}],
-  [.88,{hand:[-.26,.53,.15],pitch:1.38,body:[.004,-.12,.002],hip:-.035,drop:-.037,step:.02,lift:.011,free:[.25,.59,.03],shield:[.225,.565,.24],weight:.25}],
- ]],
- ['lunge',[
-  [.10,{hand:[-.285,.49,.095],pitch:1.46,body:[.012,-.31,.013],hip:-.25,drop:-.055,shift:[.009,-.023],free:[.245,.62,.035],shield:[.205,.585,.26],weight:.42}],
-  [.20,{hand:[-.28,.475,.105],pitch:1.53,body:[.021,-.33,.018],hip:-.14,drop:-.080,shift:[.009,-.029],free:[.25,.62,-.005],shield:[.195,.59,.265],weight:.73}],
-  [.24,{hand:[-.26,.485,.16],pitch:1.56,body:[.025,-.28,.016],hip:-.015,drop:-.081,shift:[.007,-.017],free:[.26,.61,-.035],shield:[.21,.57,.265],weight:.84}],
-  [.37,{hand:[-.225,.51,.30],pitch:1.57,aim:.29,body:[.032,-.075,.004],hip:.19,drop:-.081,shift:[.003,.031],step:.085,lift:.018,free:[.28,.58,-.13],shield:[.24,.55,.25],weight:.98}],
-  [.51,{hand:[-.205,.515,.33],pitch:1.58,aim:.275,body:[.033,.025,-.009],hip:.27,drop:-.091,shift:[-.002,.064],step:.16,free:[.285,.55,-.17],shield:[.255,.54,.235],weight:1}],
-  [.72,{hand:[-.265,.49,.18],pitch:1.54,body:[.022,-.045,-.002],hip:.13,drop:-.069,shift:[.004,.030],step:.12,free:[.275,.59,-.075],shield:[.235,.56,.245],weight:.63}],
-  [.88,{hand:[-.27,.485,.14],pitch:1.49,body:[.013,-.115,.004],hip:-.025,drop:-.046,shift:[.003,.006],step:.04,lift:.014,free:[.255,.60,.02],shield:[.225,.565,.24],weight:.28}],
- ]],
-].map(([name,poses])=>clip('lance',name,poses,lanceReady,lanceShieldReady));
-
 function charged(kind,normal){
  const source=normal.at(-1),remap=kind==='rapier'
   ?new Map([[.055,.10],[.12,.26],[.235,.34],[.34,.395],[.43,.43],[.62,.62],[.82,.83]])
@@ -146,5 +109,4 @@ function charged(kind,normal){
 
 export const THRUST_MOTIONS={
  rapier:{ready:rapierReady,shieldReady:rapierShieldReady,clips:rapierClips,charged:charged('rapier',rapierClips)},
- lance:{ready:lanceReady,shieldReady:lanceShieldReady,clips:lanceClips,charged:charged('lance',lanceClips)},
 };

@@ -3,8 +3,9 @@ import {FAST_MOTIONS} from './melee-fast.js';
 import {THRUST_MOTIONS} from './melee-thrust.js';
 import {HEAVY_MOTIONS} from './melee-heavy.js';
 import {KNUCKLE_MOTIONS} from './knuckle-motion.js';
+import {LANCE_MOTIONS} from './lance-motion.js';
 
-const PROFILES={...FAST_MOTIONS,...THRUST_MOTIONS,...HEAVY_MOTIONS,knuckle:KNUCKLE_MOTIONS};
+const PROFILES={...FAST_MOTIONS,...THRUST_MOTIONS,...HEAVY_MOTIONS,knuckle:KNUCKLE_MOTIONS,lance:LANCE_MOTIONS};
 const clamp=x=>Math.max(0,Math.min(1,x));
 const smooth=x=>{x=clamp(x);return x*x*(3-2*x);};
 const ramp=(p,a,b)=>smooth((p-a)/(b-a));
@@ -30,14 +31,14 @@ export function sampleMelee(kind,attack,{nextCombo=null,charging=null,hasShield=
  const ready=hasShield&&profile.shieldReady?profile.shieldReady:profile.ready;
  if(!attack){
   if(!charging)return {...ready,name:'ready'};
-  if(profile.chargeHold)return {...profile.chargeHold(charging),name:'chargeHold',hasShield};
+  if(profile.chargeHold)return {...profile.chargeHold(charging,{hasShield,legFrame}),name:'chargeHold',hasShield};
   const clip=profile.charged||profile.clips[0],keys=keysFor(clip,hasShield),load=profile.hold||keys.find(([p])=>p>=.20)?.[1]||keys[1][1];
   const from=charging.from||ready,amount=ramp(charging.elapsed||0,.10,.70);
   return {...blendMelee(from,load,amount),name:'chargeHold',hasShield};
  }
  const clip=meleeClip(kind,attack,{legFrame});if(!clip)return null;
  const keys=keysFor(clip,hasShield),p=clamp(attack.elapsed/attack.duration),start=attack.blendFrom||ready;
- let out=profile.sampleClip?profile.sampleClip(clip,p,start):sampleKeys(keys,p,start);
+ let out=profile.sampleClip?profile.sampleClip(clip,p,start,{hasShield,legFrame}):sampleKeys(keys,p,start);
  // A held charge has already loaded the weapon. Keep that load on release,
  // rather than lowering the weapon and repeating the idle preparation.
  if(!profile.sampleClip&&attack.charge>.5&&profile.charged&&start.name==='chargeHold'){
@@ -48,7 +49,7 @@ export function sampleMelee(kind,attack,{nextCombo=null,charging=null,hasShield=
  // The simulation saves this exact connected pose as the next attack's start.
  const chainStart=clip.chainStart??profile.chainStart??.70;
  if(nextCombo!==null&&p>chainStart){
-  const next=meleeClip(kind,{combo:nextCombo},{legFrame}),preparation=next.prepare||keysFor(next,hasShield)[1][1];
+  const next=meleeClip(kind,{combo:nextCombo},{legFrame}),preparation=(hasShield?next.shieldPrepare:next.prepare)||keysFor(next,hasShield)[1][1];
   out=blendMelee(out,preparation,(profile.chainAmount??.82)*ramp(p,chainStart,1));
   if(profile.chainStart!==undefined)out={...out,preparedNext:nextCombo%profile.clips.length};
  }

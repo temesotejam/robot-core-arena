@@ -1,0 +1,42 @@
+name: Lance motion preview
+on:
+  push:
+    paths:
+      - src/lance-motion.js
+      - src/melee-motion.js
+      - scripts/melee-preview.cjs
+      - tests/lance-motion.test.mjs
+      - .github/workflows/lance-preview.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm run check && npm test
+      - run: npm install --no-save --package-lock=false playwright@1.63.0
+      - run: npx playwright install --with-deps chromium
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: node scripts/melee-motion-browser.cjs --weapons=lance --matrix-only
+        env:
+          MELEE_REVIEW_OUTPUT: /tmp/lance-preview/matrix
+      - run: node scripts/melee-preview.cjs --weapon=lance
+        env:
+          MELEE_PREVIEW_OUTPUT: /tmp/lance-preview/combo
+      - run: node scripts/melee-preview.cjs --weapon=lance --charge
+        env:
+          MELEE_PREVIEW_OUTPUT: /tmp/lance-preview/charge
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lance-motion-preview
+          path: |
+            /tmp/lance-preview/combo/deliverables
+            /tmp/lance-preview/charge/deliverables
+            /tmp/lance-preview/matrix/review.json

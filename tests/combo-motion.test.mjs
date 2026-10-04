@@ -145,13 +145,14 @@ test('パンチは足を入れ替えず反対の手を構えに残し、二足4�
   if(frame!=='panzer')assert(bootHeight>.30,'二足4段目で実際に蹴り足を持ち上げる');else assert.equal(bootHeight,0);
  }
 });
-test('全近接の手首が回転の折り返しで飛ばず、突きは胴を直立させる',()=>{
+test('全近接の手首が回転の折り返しで飛ばず、突きは制御した前傾を使う',()=>{
  for(const [kind,clips]of Object.entries(COMBO_CLIPS))for(let combo=0;combo<clips.length;combo++)for(const hand of ['right','left']){
   let previous=null;
   for(let i=0;i<=240;i++){
    const p=sampleMotion(kind,{combo,elapsed:i/240,duration:1}),q=new THREE.Quaternion().setFromEuler(new THREE.Euler(...p[hand].rotation));
    if(previous)assert(previous.angleTo(q)<.15,`${kind} ${combo} ${hand}: 手首の向きが飛ぶ`);previous=q;
-   if(['rapier','lance'].includes(kind))assert(Math.abs(p.body[0])<.04,`${kind}: 突きで胴を倒しすぎる`);
+   if(kind==='rapier')assert(Math.abs(p.body[0])<.04,`${kind}: 突きで胴を倒しすぎる`);
+   if(kind==='lance')assert(Math.abs(p.body[0])<.15,`${kind}: 踏み込みで胴を倒しすぎる`);
   }
  }
 });
