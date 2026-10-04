@@ -41,7 +41,9 @@ let browser;
      const w=ref.weaponAttachments[0],head=w.localToWorld(new THREE.Vector3(...(w.userData.strikeCenter||[0,.49,0]))),grip=w.getWorldPosition(new THREE.Vector3()),support=w.localToWorld(new THREE.Vector3(...w.userData.supportGrip));
      const values={head:head.toArray(),grip:grip.toArray(),supportError:support.distanceTo(ref.arms[1].hand.getWorldPosition(new THREE.Vector3())),minLegGeometry:new THREE.Box3().setFromObject(ref.legGroup,true).min.y};
      window.readyImage=view=>{
-      const side=kind==='hammer'?-1:1,cameras={front:[0,1.05,2.60],side:[side*2.60,1.05,0],threequarter:[side*1.9,1.10,2.0]};r.camera.position.set(...cameras[view]);r.camera.lookAt(0,.53,0);r.camera.updateMatrixWorld(true);
+      // The shared camera must also fit the old horizontal hammer from its
+      // near side, including the conservative corners of its full bounds.
+      const side=kind==='hammer'?-1:1,cameras={front:[0,1.10,3.30],side:[side*3.30,1.10,0],threequarter:[side*2.4,1.20,2.5]};r.camera.position.set(...cameras[view]);r.camera.lookAt(0,.60,0);r.camera.updateMatrixWorld(true);
       const box=new THREE.Box3();ref.root.traverse(o=>{if(o.isMesh&&o.visible&&o!==ref.ring&&!ref.weaponTrails.some(t=>t.mesh===o))box.expandByObject(o);});
       let clipped=false;for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]){const p=new THREE.Vector3(x,y,z).project(r.camera);if(Math.abs(p.x)>.97||Math.abs(p.y)>.97)clipped=true;}
       r.renderer.render(r.scene,r.camera);return {pixels:r.canvas.toDataURL('image/png').split(',')[1],clipped,glError:r.renderer.getContext().getError(),contextLost:!!r.contextLost};
@@ -50,7 +52,9 @@ let browser;
     },{kind,frame});
     assert(measurements.supportError<.005);if(version==='after')assert(measurements.minLegGeometry>=-1e-7);
     for(const view of ['front','side','threequarter']){
-     const result=await page.evaluate(view=>window.readyImage(view),view);assert.equal(result.clipped,false);assert.equal(result.glError,0);assert.equal(result.contextLost,false);
+     const result=await page.evaluate(view=>window.readyImage(view),view);
+     report.lastCapture={version,frame,view,clipped:result.clipped,glError:result.glError,contextLost:result.contextLost};
+     assert.equal(result.clipped,false,`${version}/${frame}/${view}: model bounds leave the image`);assert.equal(result.glError,0);assert.equal(result.contextLost,false);
      const name=`${version}-${frame}-${view}.png`,bytes=Buffer.from(result.pixels,'base64');fs.writeFileSync(path.join(output,name),bytes);
      report.captures.push({version,frame,view,name,sha256:crypto.createHash('sha256').update(bytes).digest('hex'),...measurements});
     }
