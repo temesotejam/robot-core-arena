@@ -83,9 +83,12 @@ test('通常の先行入力と満溜め解除は準備済みの全身を引き�
  assert.deepEqual(released.body,held.body);
 });
 
-test('実入力の2段・近距離と空振りの満溜めで全5フレームの脚装甲が床を貫通しない',()=>{
+test('実入力の2段・満溜めで全5フレームの脚と大型ハンマーが床や自機を貫通しない',()=>{
  for(const frame of frames)for(const fps of [30,60,120])for(const mode of ['combo','chargeNear','chargeFar']){
   const {config,ref}=fixture(frame),enemy=defaultConfig(0,true);enemy.passives=[];enemy.abilities=[];
+  const ownMeshes=[],paths=[[[0,.105,0],[0,.485,0]],[[0,.465,0],[0,.735,0]],...[-.16,0,.16].map(z=>[[-.30,.60,z],[.30,.60,z]])];
+  ref.bodyPivot.children[0].traverse(o=>{if(!o.isMesh)return;for(let p=o;p&&p!==ref.bodyPivot;p=p.parent)if(ref.arms.includes(p))return;ownMeshes.push(o);});
+  ref.legGroup.traverse(o=>{if(o.isMesh)ownMeshes.push(o);});
   const b=new Battle({allies:[config],enemies:[enemy],setup:{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true},getItem:id=>CATALOG[id],rng:()=>.99});b.countdown=0;b.training.freezeAI=true;
   const u=b.human,v=b.entities[1],charged=mode!=='combo',stages=charged?1:2,holdFrames=charged?Math.ceil(b.maxCharge(u)*fps)+1:1;
   Object.assign(u,{x:0,z:0,yaw:0,target:v.id});Object.assign(v,{x:0,z:mode==='chargeFar'?5:.9,yaw:Math.PI});
@@ -98,6 +101,10 @@ test('実入力の2段・近距離と空振りの満溜めで全5フレームの
    const bottom=new THREE.Box3().setFromObject(ref.legGroup,true).min.y;
    assert(bottom>=-1e-7,`${frame}/${fps}/${mode}/${u.attack?.combo}/${u.attack&&u.attack.elapsed/u.attack.duration}: 脚の装甲が床へ${-bottom}入る`);
    assert(new THREE.Box3().setFromObject(ref.weaponAttachments[0],true).min.y>=0,`${frame}/${fps}/${mode}: 大型ハンマーの外形が床を貫通`);
+   const weapon=ref.weaponAttachments[0];for(const path of paths){
+    const a=weapon.localToWorld(new THREE.Vector3(...path[0])),c=weapon.localToWorld(new THREE.Vector3(...path[1])),d=c.clone().sub(a);
+    assert.equal(new THREE.Raycaster(a,d.clone().normalize(),0,d.length()).intersectObjects(ownMeshes,false).length,0,`${frame}/${fps}/${mode}/${u.attack?.combo}/${u.attack&&u.attack.elapsed/u.attack.duration}: 柄やヘッドが自機を貫通`);
+   }
    if(starts===stages&&!u.attack&&!u.motion){ended??=b.time;if(b.time-ended>=.25)break;}
   }
   assert.equal(starts,stages);assert(ended!==null);
