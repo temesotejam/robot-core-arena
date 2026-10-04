@@ -18,36 +18,8 @@ function p(hand,pitch,azimuth,body,hipYaw,drop,shift,weight,footYaw=[-.08,.10]){
   body,hipYaw,drop,shift,weight,feet:feet.map(v=>[...v]),footYaw,
   poles:[[-.72,-.50,-.26],[.66,-.48,-.24]]});
 }
-const hammerReady=p([-.025,.55,.16],.48,-.10,[.025,-.08,0],-.04,-.018,[0,0],0);
 const naginataReady=p([-.025,.59,.16],.68,-.16,[.015,-.12,0],-.06,-.018,[0,0],0);
 const scytheReady=p([-.015,.58,.16],.88,.20,[.025,.10,0],.05,-.024,[0,0],0);
-
-const hammerSweep={name:'hammerSweep',keys:[
- [0,hammerReady],
- [.10,p([.018,.575,.145],1.18,-.52,[-.04,-.18,.02],-.32,-.050,[.008,-.015],.38)],
- [.22,p([.030,.585,.150],1.42,-.57,[-.065,-.40,.025],-.46,-.072,[.014,-.017],.72)],
- [.27,p([.025,.590,.155],1.48,-.57,[-.060,-.43,.025],-.19,-.076,[.013,-.006],.86)],
- [.335,p([.005,.590,.178],1.50,-.40,[.020,-.25,.012],.12,-.071,[.006,.009],1)],
- [.395,p([-.020,.585,.180],1.53,.03,[.085,.08,-.016],.32,-.069,[-.006,.027],1)],
- [.48,p([-.042,.565,.170],1.62,.43,[.13,.49,-.035],.39,-.061,[-.013,.034],.95,[.16,.16])],
- [.61,p([-.044,.565,.138],1.57,.56,[.11,.61,-.03],.31,-.052,[-.009,.025],.62,[.18,.14])],
- [.72,p([-.023,.610,.145],1.24,.28,[.06,.39,-.018],.20,-.040,[-.002,.015],.34)],
- [.87,p([-.023,.610,.155],.72,.03,[.035,.08,-.006],.04,-.025,[0,.005],.16)],
- [1,hammerReady],
-]};
-const hammerSlam={name:'hammerSlam',keys:[
- [0,hammerReady],
- [.10,p([.015,.710,.210],.10,-.08,[-.025,-.08,.010],-.12,-.052,[0,-.010],.35)],
- [.22,p([.018,.858,.185],-.67,-.08,[-.040,-.06,.010],-.16,-.068,[0,-.013],.72)],
- [.27,p([.018,.858,.185],-.73,-.08,[-.040,-.04,.008],.00,-.071,[0,-.008],.90)],
- [.34,p([-.023,.760,.130],.38,-.06,[.015,-.02,.004],.16,-.075,[0,.013],1)],
- [.405,p([-.022,.670,.155],1.32,-.04,[.14,.01,-.004],.22,-.081,[0,.031],1)],
- [.48,p([-.023,.718,.155],2.10,-.04,[.21,.015,-.004],.22,-.078,[0,.038],1,[.09,.10])],
- [.58,p([-.023,.722,.135],2.13,-.04,[.19,.012,-.003],.17,-.074,[0,.031],.73,[.09,.10])],
- [.70,p([-.025,.650,.128],1.62,-.06,[.11,.01,0],.10,-.054,[0,.019],.40)],
- [.86,p([-.025,.645,.135],.78,-.08,[.045,-.035,0],.02,-.030,[0,.007],.16)],
- [1,hammerReady],
-]};
 
 const naginataSweep={name:'sweep',keys:[
  [0,naginataReady],
@@ -149,7 +121,6 @@ function chargedSlam(ready,kind){
 }
 
 export const HEAVY_MOTIONS={
- hammer:{ready:hammerReady,clips:[hammerSweep,hammerSlam],charged:chargedSlam(hammerReady,'hammer')},
  naginata:{ready:naginataReady,clips:[naginataSweep,naginataReturn,naginataDiagonal],charged:chargedSlam(naginataReady,'naginata')},
  scythe:{ready:scytheReady,clips:[scytheReturn,scytheSweep,scytheHook],charged:chargedSlam(scytheReady,'scythe')},
 };
@@ -157,14 +128,11 @@ export const HEAVY_MOTIONS={
 // Visual contact landmarks, relative to the existing interval. They describe
 // the metallic head/blade's main forward passage; recovery's second crossing
 // of the same space is deliberately outside this window.
-hammerSweep.contact={start:.329,center:.413,end:.458};
-hammerSlam.contact={start:.377,center:.403,end:.464};
 naginataSweep.contact={start:.375,center:.406,end:.470};
 naginataReturn.contact={start:.380,center:.397,end:.428};
 naginataDiagonal.contact={start:.408,center:.427,end:.479};
 scytheReturn.contact={start:.410,center:.425,end:.527};
 scytheSweep.contact={start:.325,center:.387,end:.462};
 scytheHook.contact={start:.321,center:.354,end:.431};
-HEAVY_MOTIONS.hammer.charged.contact={start:.384,center:.427,end:.458};
 HEAVY_MOTIONS.naginata.charged.contact={start:.486,center:.511,end:.541};
 HEAVY_MOTIONS.scythe.charged.contact={start:.509,center:.517,end:.525};

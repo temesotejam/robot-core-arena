@@ -4,8 +4,9 @@ import {THRUST_MOTIONS} from './melee-thrust.js';
 import {HEAVY_MOTIONS} from './melee-heavy.js';
 import {KNUCKLE_MOTIONS} from './knuckle-motion.js';
 import {LANCE_MOTIONS} from './lance-motion.js';
+import {HAMMER_MOTIONS} from './hammer-motion.js';
 
-const PROFILES={...FAST_MOTIONS,...THRUST_MOTIONS,...HEAVY_MOTIONS,knuckle:KNUCKLE_MOTIONS,lance:LANCE_MOTIONS};
+const PROFILES={...FAST_MOTIONS,...THRUST_MOTIONS,...HEAVY_MOTIONS,knuckle:KNUCKLE_MOTIONS,lance:LANCE_MOTIONS,hammer:HAMMER_MOTIONS};
 const clamp=x=>Math.max(0,Math.min(1,x));
 const smooth=x=>{x=clamp(x);return x*x*(3-2*x);};
 const ramp=(p,a,b)=>smooth((p-a)/(b-a));

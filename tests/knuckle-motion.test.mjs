@@ -205,11 +205,11 @@ test('溜め・必殺・再入力・4段目キックは初回命中の過去区�
 
 // Rebased for the LBX proportion revision: armour topology and leg lengths
 // intentionally change every frame. Attack timing and authored arm rigs do not.
-// Lance is intentionally revised separately; these retain every other weapon,
+// Lance and hammer are intentionally revised separately; retain other weapons,
 // all five frames, idle/guard/charge hold,
 // and six phases of both ordinary and charged attacks; trails are not poses.
 const otherWeaponPoses={
- sword:'c360a138b71ccc69128a4c2da877ec5ab7752daeadcd5e1ecb1d3c1fd294a59d',rapier:'2140a2a6ead3d663a491efba08b363f6670b93e3df8f823dfab575d62fb60ea9',dualSword:'550357d3107d3d8dad4486a365eea7cf22c5bb7f2852708c17d639373d60e5e5',naginata:'d54c8e9587df94cedc6da099504d501313d827fdbb9830d5866a039eeb87a3a2',dagger:'44743f4150a4c76ab1ff2e9a37b9e25d9d513c5992308a1b595550dadb173d0b',hammer:'2d4712d76a3545868ba4e7e7c5f319b46355f7b4c751bb81aa19413c6921d3e6',scythe:'a7cb27790708f6a73f9b7d24fb59bc5eb06c545d2986402466e5b485d9c031e3',pistol:'d53c2afb16ad88fd796b540027c51d2d5a81f702e7bfc7a29ff39fc72e9741f3',machinegun:'489d53581ce7ffde42be5a815eec10bafb110d2560939073485dac86a5d43cf5',shotgun:'bf48df38c1b059a9de8d6b137c08189e79d26d8d4e3e949adc388eb5d2d59d57',dualGun:'d6cfdfb47cfafc08e07a1c7979f657ad00a1a9bc77ee6b20572808e4f12d40a0',rifle:'61e6b43c2af5ad848bc74217c73289dcdf27b6bc0cf4283943753351e04c180f',assault:'288c3f06c69b31059deb3c50f88520870316bd13bfc097de39a661703b580846',sniper:'14135398aeb28d524ca99d597bcb0ae8e5d78a32f51cc96a2f5e5c9ba84ddf47',heavyShotgun:'e9323b57da1d6a12ff70ee6024b1e2c3479ce96ee0a32d75d67c3a10d1fb9f70',bazooka:'ddb3a18df2432c32a2fbc51541cf73c02d1b4a801783263f8cb2bb4f6de4ae16',missile:'5390453f660ec04dc17195fc47273137e23574ef3be6e6707e84233278f0bbb7',
+ sword:'c360a138b71ccc69128a4c2da877ec5ab7752daeadcd5e1ecb1d3c1fd294a59d',rapier:'2140a2a6ead3d663a491efba08b363f6670b93e3df8f823dfab575d62fb60ea9',dualSword:'550357d3107d3d8dad4486a365eea7cf22c5bb7f2852708c17d639373d60e5e5',naginata:'d54c8e9587df94cedc6da099504d501313d827fdbb9830d5866a039eeb87a3a2',dagger:'44743f4150a4c76ab1ff2e9a37b9e25d9d513c5992308a1b595550dadb173d0b',scythe:'a7cb27790708f6a73f9b7d24fb59bc5eb06c545d2986402466e5b485d9c031e3',pistol:'d53c2afb16ad88fd796b540027c51d2d5a81f702e7bfc7a29ff39fc72e9741f3',machinegun:'489d53581ce7ffde42be5a815eec10bafb110d2560939073485dac86a5d43cf5',shotgun:'bf48df38c1b059a9de8d6b137c08189e79d26d8d4e3e949adc388eb5d2d59d57',dualGun:'d6cfdfb47cfafc08e07a1c7979f657ad00a1a9bc77ee6b20572808e4f12d40a0',rifle:'61e6b43c2af5ad848bc74217c73289dcdf27b6bc0cf4283943753351e04c180f',assault:'288c3f06c69b31059deb3c50f88520870316bd13bfc097de39a661703b580846',sniper:'14135398aeb28d524ca99d597bcb0ae8e5d78a32f51cc96a2f5e5c9ba84ddf47',heavyShotgun:'e9323b57da1d6a12ff70ee6024b1e2c3479ce96ee0a32d75d67c3a10d1fb9f70',bazooka:'ddb3a18df2432c32a2fbc51541cf73c02d1b4a801783263f8cb2bb4f6de4ae16',missile:'5390453f660ec04dc17195fc47273137e23574ef3be6e6707e84233278f0bbb7',
 };
 test('6段の拳と蹴りは5フレームで腰・胸・荷重を大きく使い、蹴り足は畳んでから伸ばして接地する',()=>{
  for(const frame of frames){
@@ -256,7 +256,7 @@ test('6段の拳と蹴りは5フレームで腰・胸・荷重を大きく使い
   assert(Math.abs(plant.y-.035)<1e-7,`${frame}: 回収した脚が接地しない`);
  }
 });
-test('LBX体型のランス以外の他17武器も全5フレームの構えと表示姿勢を維持する',()=>{
+test('LBX体型のランス・ハンマー以外の他16武器も全5フレームの構えと表示姿勢を維持する',()=>{
  for(const [kind,expected]of Object.entries(otherWeaponPoses)){
   const hash=createHash('sha256');for(const frame of frames){
    const config=defaultConfig();config.armor=Object.fromEntries(PARTS.map(p=>[p,`armor:${frame}:${p}`]));config.sets[0]={item:`weapon:${kind}`,shield:WEAPONS[kind].shield?'shield:basic':null,separate:false};

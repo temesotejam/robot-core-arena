@@ -46,12 +46,12 @@ let browser;
    const nodes=[];ref.root.traverse(o=>nodes.push(o));
    const anchors=[null,null],point=o=>o.getWorldPosition(new THREE.Vector3());
    const attack=b.attack.bind(b);b.attack=(unit,charge=0,input={})=>{const ok=attack(unit,charge,input);if(ok&&unit===u)data.starts.push({id:u.attack.id,combo:u.attack.combo,charge,time:b.time});return ok;};
-   const stages=charged?1:u.stats.weapon.combo,holdFrames=charged?Math.ceil(b.maxCharge(u)*60)+1:1;
+   const stages=charged?1:u.stats.weapon.combo,holdFrames=charged?Math.ceil(b.maxCharge(u)*60)+1:1,idleFrames=kind==='hammer'?72:30;
    let pressing=false,held=0,ended=null;
    b.paused=false;
    for(let frame=0;frame<600;frame++){
     const rt=b.runtime(u),a=u.attack,input={};
-    const first=frame>=30&&!data.starts.length&&!a&&!u.motion&&held<holdFrames;
+    const first=frame>=idleFrames&&!data.starts.length&&!a&&!u.motion&&held<holdFrames;
     const follow=a&&a.combo<stages-1&&u.comboHit&&!u.queuedAttack&&rt.cooldown<=.14&&rt.cooldown>0;
     if(charged){if(first){input.attack=true;held++;}}
     else if(pressing)pressing=false;else if(first||follow){input.attack=true;pressing=true;held++;}
