@@ -106,7 +106,7 @@ test('全5フレーム・19武器は機体全体を横に倒し、地面を貫�
   for(const away of [0,Math.PI/2,Math.PI,Math.PI*1.5])for(const elapsed of [0,.5,.99]){v.knockdown.away=away;v.knockdown.elapsed=elapsed;draw(ref,v);const up=new THREE.Vector3(0,1,0).applyQuaternion(ref.root.quaternion),bb=bounds(ref);assert(Math.abs(up.y)<1e-7,`${frame}/${kind}: 横たわる`);assert(bb.min.y>=v.y+.019,`${frame}/${kind}: 接地`);assert(ref.head.getWorldPosition(new THREE.Vector3()).y<v.y+.5,`${frame}/${kind}: 武器で持ち上がらない`);
    const normal=new THREE.Vector3(0,0,1).transformDirection(ref.ring.matrixWorld);assert(Math.abs(normal.y)>.999999,'チームリングは水平');
    for(const arm of ref.arms){assert(arm.hand.position.distanceTo(arm.lower.position.clone().add(new THREE.Vector3(0,-.195,0).applyQuaternion(arm.lower.quaternion)))<1e-7,'手と前腕がつながる');}
-   if(ref.weaponAttachments[0].userData.supportGrip)assert(ref.arms[0].hand.quaternion.angleTo(ref.arms[1].hand.quaternion)<1e-7,'両手武器の握りを維持');
+   if(ref.weaponAttachments[0].userData.supportGrip){const expected=ref.arms[0].hand.quaternion.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),ref.weaponAttachments[0].userData.supportRoll||0));assert(expected.angleTo(ref.arms[1].hand.quaternion)<1e-7,'両手武器の握りを維持');}
   }
   v.knockdown.phase='rise';let previous=-1;for(const elapsed of [0,.1,.25,.4,KNOCKDOWN.rise]){v.knockdown.elapsed=elapsed;draw(ref,v);const up=new THREE.Vector3(0,1,0).applyQuaternion(ref.root.quaternion);assert(up.y>=previous-1e-8);previous=up.y;assert(bounds(ref).min.y>=v.y+.019);}
   assert(Math.abs(previous-1)<1e-8);v.knockdown=null;v.down=0;v.rise=0;draw(ref,v);assert(ref.root.position.distanceTo(new THREE.Vector3(v.x,v.y,v.z))<1e-8);

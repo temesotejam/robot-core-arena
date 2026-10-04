@@ -20,12 +20,12 @@ export function meleeJoint(hand,side,pole=[side*.5,-.8,-.25],clavicle=[0,0,0]){
  return {upper:upper.toArray(),bend,roll:0,wrist:grip.toArray(),clavicle:[...clavicle],side};
 }
 function finish(frame){return {...frame,right:swordArm(frame.joints.right).pose,left:swordArm(frame.joints.left).pose};}
-export function meleePose({right=defaultHand(-1),left=defaultHand(1),body=[0,0,0],head=null,hipYaw=0,drop=0,shift=[0,0],feet=[[-.105,.035,.085],[.105,.035,-.015]],footYaw=[0,0],weight=0,poles=[[-.5,-.8,-.25],[.5,-.8,-.25]],clavicles=null,twoHand=false,hasShield=false}={}){
+export function meleePose({right=defaultHand(-1),left=defaultHand(1),body=[0,0,0],head=null,hipYaw=0,drop=0,shift=[0,0],feet=[[-.105,.035,.085],[.105,.035,-.015]],footYaw=[0,0],weight=0,poles=[[-.5,-.8,-.25],[.5,-.8,-.25]],clavicles=null,twoHand=false,supportGrip=null,supportRoll=0,hasShield=false}={}){
  const joints={right:meleeJoint(right,-1,poles[0],clavicles?.[0])};
  const primary=swordArm(joints.right).pose;
- if(twoHand){const support=new THREE.Vector3(0,.09,0).applyEuler(new THREE.Euler(...primary.rotation)).add(new THREE.Vector3(...primary.position));left={position:support.toArray(),rotation:[...primary.rotation]};}
+ if(twoHand){const orientation=quaternion(primary.rotation),support=new THREE.Vector3(...(supportGrip||[0,.09,0])).applyQuaternion(orientation).add(new THREE.Vector3(...primary.position)),e=new THREE.Euler().setFromQuaternion(orientation.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),supportRoll)));left={position:support.toArray(),rotation:[e.x,e.y,e.z]};}
  joints.left=meleeJoint(left,1,poles[1],clavicles?.[1]);
- return finish({melee:true,twoHand,hasShield,joints,body:[...body],head:head?[...head]:[-body[0]*.7,-body[1]*.85,-body[2]*.55],hipYaw,drop,shift:[...shift],feet:feet.map(v=>[...v]),footYaw:[...footYaw],weight,poles:poles.map(v=>[...v]),...(clavicles?{clavicles:clavicles.map(v=>[...v])}:{}),shaft:twoHand?primary:null});
+ return finish({melee:true,twoHand,hasShield,joints,body:[...body],head:head?[...head]:[-body[0]*.7,-body[1]*.85,-body[2]*.55],hipYaw,drop,shift:[...shift],feet:feet.map(v=>[...v]),footYaw:[...footYaw],weight,poles:poles.map(v=>[...v]),...(clavicles?{clavicles:clavicles.map(v=>[...v])}:{}),...(supportGrip?{supportGrip:[...supportGrip],supportRoll}:{}),shaft:twoHand?primary:null});
 }
 function blendJoint(a,b,t){return {upper:rotation(a.upper,b.upper,t),bend:a.bend+(b.bend-a.bend)*t,roll:a.roll+(b.roll-a.roll)*t,wrist:rotation(a.wrist,b.wrist,t),clavicle:vector(a.clavicle,b.clavicle,t),side:a.side};}
 export function blendMelee(a,b,t){
@@ -39,6 +39,7 @@ export function blendMelee(a,b,t){
   frame.kneePoles=(a.kneePoles||defaults(a)).map((v,i)=>vector(v,(b.kneePoles||defaults(b))[i],t));
  }
  if(a.twoHand&&b.twoHand){
+  if(a.supportGrip||b.supportGrip){frame.supportGrip=vector(a.supportGrip||[0,.09,0],b.supportGrip||[0,.09,0],t);frame.supportRoll=(a.supportRoll||0)+((b.supportRoll||0)-(a.supportRoll||0))*t;}
   const qa=quaternion(a.shaft.rotation),qb=quaternion(b.shaft.rotation),e=new THREE.Euler().setFromQuaternion(qa.slerp(qb,t));
   return meleePose({...frame,right:{position:vector(a.shaft.position,b.shaft.position,t),rotation:[e.x,e.y,e.z]},twoHand:true});
  }

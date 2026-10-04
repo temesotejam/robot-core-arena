@@ -7,6 +7,7 @@ import {swordArm,swordMotion,swordChargeHold} from '../src/sword-motion.js';
 import {createRobot,ArenaRenderer,ROBOT_PROPORTIONS} from '../src/render.js';
 import {defaultConfig,cost} from '../src/customize.js';
 import {CATALOG,PARTS,WEAPONS} from '../src/data.js';
+import {HAMMER_GRIP} from '../src/hammer-grip.js';
 
 const kinds=['rapier','dualSword','lance','naginata','knuckle','dagger','hammer','scythe'];
 const frames=['knight','strider','wild','brawler','panzer'];
@@ -62,7 +63,7 @@ function selfMeshes(ref){
 function weaponPaths(kind){
  if(kind==='knuckle')return [[[0,0,.07],[0,0,.13]]];
  if(kind==='hammer')return [[[0,.105,0],[0,.485,0]],[[0,.465,0],[0,.735,0]],
-  ...[-.16,0,.16].map(z=>[[-.30,.60,z],[.30,.60,z]])];
+  ...[-.16,0,.16].map(z=>[[-.30,.60,z],[.30,.60,z]])].map(path=>path.map(([x,y,z])=>[x,y-HAMMER_GRIP.advance,z]));
  if(kind==='lance')return [[[0,.105,0],[0,.90,0]]];
  if(kind==='naginata')return [[[0,.105,0],[0,.61,0]],[[0,.61,0],[.035,.90,0]]];
  if(kind==='scythe')return [[[0,.105,0],[0,.68,0]],[[0,.68,0],[.13,.77,0]],[[.13,.77,0],[.30,.72,0]],[[.30,.72,0],[.34,.55,0]]];

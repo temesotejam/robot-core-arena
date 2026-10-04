@@ -6,6 +6,7 @@ import {swordArm} from './sword-motion.js';
 import {presentKnuckle} from './knuckle-motion.js';
 import {sampleLocomotion} from './locomotion.js';
 import {sampleLanding} from './landing-motion.js';
+import {HAMMER_GRIP} from './hammer-grip.js';
 const mats=new Map(),boxes=new Map(),armorGeometries=new Map(),plateGeometries=new Map(),ankleGeometries=new Map();
 // Cached meshes share resources across robots. Release only scene-owned GPU
 // resources, once each, when a weapon or a complete scene is replaced.
@@ -70,7 +71,10 @@ function weaponModel(kind,team){const group=new THREE.Group(),w=WEAPONS[kind],me
     for(const y of [.525,.675])for(const z of [-.095,.095]){const bolt=cylinder(.010,.018,dark,x,y,z,6);bolt.rotation.z=Math.PI/2;group.add(bolt);}
    }
    group.add(glow(.015,.18,.33,accent,-.207,.60,0),glow(.015,.18,.33,accent,.207,.60,0));
-   group.userData.strikeCenter=[0,.60,0];
+   // The lead hand now grips farther along the existing haft. Translate the
+   // complete rigid model, including its T-joint, rather than extending it.
+   for(const part of group.children)part.position.y-=HAMMER_GRIP.advance;
+   group.userData.strikeCenter=[0,.60-HAMMER_GRIP.advance,0];
   }
   else if(['lance','naginata','scythe'].includes(kind)){group.add(box(.028,.8,.028,'#607482',0,.3,0));if(kind==='lance'){const tip=new THREE.Mesh(new THREE.ConeGeometry(.055,.2,4),material(metal));tip.position.y=.8;group.add(tip);}else {const points=kind==='scythe'?[[-.025,.68],[.13,.77],[.30,.72],[.34,.55],[.20,.68],[.08,.69]]:[[-.025,.61],[-.02,.79],[.035,.9],[.11,.77],[.06,.65]];group.add(new THREE.Mesh(profile(points,.035),material(metal)),glow(.025,.16,.04,accent,0,.67,.022));}}
   else {const length=kind==='dagger'?.26:kind==='rapier'?.62:.47,width=kind==='rapier'?.026:.07,blade=new THREE.Mesh(profile([[-width/2,.10],[width/2,.10],[width/2,.10+length*.82],[0,.10+length],[-width/2,.10+length*.82]],.024),material(metal));blade.castShadow=true;group.add(blade,glow(.009,length*.75,.027,accent,-width/2+.012,.10+length*.43,0),armor(.14,.025,.07,dark,0,.09,0));}}
@@ -85,8 +89,9 @@ function weaponModel(kind,team){const group=new THREE.Group(),w=WEAPONS[kind],me
   const muzzle=kind==='sniper'?size+.09:['shotgun','heavyShotgun'].includes(kind)?size+.09:kind==='bazooka'?.50:kind==='missile'?.46:size+.01,flash=new THREE.Mesh(new THREE.ConeGeometry(.055,.12,6),material(accent,true));flash.rotation.x=Math.PI/2;flash.position.set(0,.10,muzzle+.06);flash.visible=false;group.add(flash);group.userData.flash=flash;
  }
  if(w.ranged&&!w.shield&&!['dualGun'].includes(kind))group.userData.supportGrip=[.045,.065,.085];
- if(['hammer','naginata','scythe'].includes(kind))group.userData.supportGrip=[0,.09,0];
- if(!w.ranged){group.userData.trailTip=kind==='knuckle'?[0,0,.13]:kind==='dagger'?[0,.36,0]:kind==='hammer'?[0,.60,0]:['lance','naginata','scythe'].includes(kind)?[0,.80,0]:[0,kind==='rapier'?.72:.57,0];group.userData.trailBase=kind==='knuckle'?[0,0,.07]:[0,.10,0];}
+ if(kind==='hammer'){group.userData.supportGrip=[...HAMMER_GRIP.support];group.userData.supportRoll=HAMMER_GRIP.supportRoll;}
+ else if(['naginata','scythe'].includes(kind))group.userData.supportGrip=[0,.09,0];
+ if(!w.ranged){group.userData.trailTip=kind==='knuckle'?[0,0,.13]:kind==='dagger'?[0,.36,0]:kind==='hammer'?[...group.userData.strikeCenter]:['lance','naginata','scythe'].includes(kind)?[0,.80,0]:[0,kind==='rapier'?.72:.57,0];group.userData.trailBase=kind==='knuckle'?[0,0,.07]:[0,.10-(kind==='hammer'?HAMMER_GRIP.advance:0),0];}
  return group;
 }
 const ARM_LENGTH=.195,DOWN=new THREE.Vector3(0,-1,0);
@@ -164,7 +169,7 @@ function supportWeapon(ref){
  const grip=ref.weaponAttachments[0].userData.supportGrip;if(!grip)return;
  const right=ref.arms[0],left=ref.arms[1],rotation=right.hand.rotation.clone();let support;
  for(let i=0;i<12;i++){support=new THREE.Vector3(...grip).applyEuler(rotation).add(right.hand.position).add(right.position);const reach=support.clone().sub(left.position),excess=reach.length()-.385;if(excess<=.0001)break;poseArm(right,right.hand.position.clone().add(right.position).addScaledVector(reach.normalize(),-excess),rotation);}
- support=new THREE.Vector3(...grip).applyEuler(rotation).add(right.hand.position).add(right.position);poseArm(left,support,rotation);
+ support=new THREE.Vector3(...grip).applyEuler(rotation).add(right.hand.position).add(right.position);const supportRotation=right.hand.quaternion.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),ref.weaponAttachments[0].userData.supportRoll||0));poseArm(left,support,new THREE.Euler().setFromQuaternion(supportRotation));
 }
 function recoveryPose(ref,u){
  const k=u.knockdown;if(!k||u.dead)return;

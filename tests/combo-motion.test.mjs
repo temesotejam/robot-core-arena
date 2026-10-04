@@ -61,7 +61,8 @@ test('両手武器の支持手の向きが柄に追従し、射撃反動が武�
  for(const kind of ['hammer','naginata','scythe','rifle','sniper']){
   const b=battle(kind),u=b.human,ref=createRobot(u.config,id=>CATALOG[id]);ref.active=0;
   u.attack=WEAPONS[kind].ranged?null:{weapon:kind,combo:0,elapsed:.4,duration:1};u.motion=WEAPONS[kind].ranged?{weapon:kind,elapsed:.04,duration:.16}:null;ArenaRenderer.prototype.animateRobot.call({},ref,u,0);
-  assert(ref.arms[0].hand.quaternion.angleTo(ref.arms[1].hand.quaternion)<1e-7,`${kind}: 支持手が柄の向きに追従する`);
+  const expected=ref.arms[0].hand.quaternion.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),ref.weaponAttachments[0].userData.supportRoll||0));
+  assert(expected.angleTo(ref.arms[1].hand.quaternion)<1e-7,`${kind}: 支持手が柄の向きに追従する`);
  }
  const kicks={};
  for(const kind of ['pistol','machinegun','sniper','bazooka','dualGun']){

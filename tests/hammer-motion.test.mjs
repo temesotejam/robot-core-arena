@@ -6,6 +6,7 @@ import {createRobot,ArenaRenderer} from '../src/render.js';
 import {defaultConfig} from '../src/customize.js';
 import {CATALOG,PARTS} from '../src/data.js';
 import {Battle} from '../src/sim.js';
+import {HAMMER_GRIP} from '../src/hammer-grip.js';
 
 const frames=['knight','strider','wild','brawler','panzer'];
 function fixture(frame='knight'){
@@ -50,7 +51,7 @@ test('大型ハンマーを腰の横から後ろへ低く構え、肩を前へ�
   const w=ref.weaponAttachments[0],grip=point(w),head=w.localToWorld(new THREE.Vector3(...w.userData.strikeCenter)),axis=head.clone().sub(grip).normalize(),ready=sampleMotion('hammer',null);
   assert(head.x<-.24,'ヘッドを体の横の外へ置かない');
   assert(axis.z<-.80&&axis.y<-.10,'柄を低い後方へ向けない');
-  assert(head.y<grip.y-.075&&head.y>.28&&head.z<grip.z-.45,'肩に担ぐか、正面へ構える');
+  assert(head.y<grip.y-.075&&head.y>.28&&head.z<point(ref.arms[1].hand).z-.45,'肩に担ぐか、正面へ構える');
   assert(grip.y>.42&&grip.y<.52,'両手の握りを腰の高さへ下げない');
   const crossbar=w.localToWorld(new THREE.Vector3(.245,.60,0)).sub(w.localToWorld(new THREE.Vector3(-.245,.60,0))).normalize();
   assert(Math.abs(axis.dot(crossbar))<1e-10&&Math.abs(crossbar.y)>.80,'ヘッドの中央の直角接続や構えの向きを崩す');
@@ -62,6 +63,28 @@ test('大型ハンマーを腰の横から後ろへ低く構え、肩を前へ�
   assert(w.localToWorld(new THREE.Vector3(...w.userData.supportGrip)).distanceTo(point(ref.arms[1].hand))<.005,'左手が柄を支えない');
   const hand=point(ref.arms[0].hand);draw(ref,u,2);assert(hand.distanceTo(point(ref.arms[0].hand))<1e-8,'待機中に握りが漂う');
   assert(new THREE.Box3().setFromObject(ref.legGroup,true).min.y>=-1e-7,'待機の脚装甲が床を貫通');
+ }
+});
+
+test('右手をヘッド側、左手を柄の端側に置き、両手が重ならず一本の柄を握り続ける',()=>{
+ for(const frame of frames){
+  const {ref,u}=fixture(frame);
+  for(const [combo,charge]of [[0,0],[1,0],[0,1]])for(let n=0;n<=120;n++){
+   const p=n/120;u.attack={id:'grasp',weapon:'hammer',combo,charge,elapsed:p,duration:1,origin:[0,0,0],yaw:0};draw(ref,u,p);
+   const w=ref.weaponAttachments[0],right=point(ref.arms[0].hand),left=point(ref.arms[1].hand),head=w.localToWorld(new THREE.Vector3(...w.userData.strikeCenter)),distance=right.distanceTo(left);
+   assert(distance>.13&&distance<.15,'両手が同じ位置へ重なるか、握りが柄から滑る');
+   assert(right.distanceTo(head)<left.distanceTo(head),'左手が右手の後ろへ回り込み、腕を交差させる');
+   assert(w.localToWorld(new THREE.Vector3(...w.userData.supportGrip)).distanceTo(left)<1e-7,'支持側の手が柄から離れる');
+   const axis=new THREE.Vector3(0,1,0).transformDirection(w.matrixWorld),handAxis=new THREE.Vector3(0,1,0).transformDirection(ref.arms[1].hand.matrixWorld);
+   assert(axis.dot(handAxis)>.999999,'支持側の握りが柄に対して折れる');
+   const palm=hand=>new THREE.Vector3(0,0,1).transformDirection(hand.matrixWorld);
+   assert(palm(ref.arms[0].hand).dot(palm(ref.arms[1].hand))<-.999999,'両手の掌を同じ向きへねじる');
+   // Both ends of the supporting fist must surround the physical solid haft.
+   const haft=w.children[1];haft.geometry.computeBoundingBox();for(const y of [-.0325,.0325]){
+    const end=haft.worldToLocal(ref.arms[1].hand.localToWorld(new THREE.Vector3(0,y,0)));
+    assert(haft.geometry.boundingBox.containsPoint(end),'柄の端を越えた空間を左手で握る');
+   }
+  }
  }
 });
 
@@ -112,7 +135,7 @@ test('通常の先行入力と満溜め解除は準備済みの全身を引き�
 test('実入力の2段・満溜めで全5フレームの腕装甲・脚・大型ハンマーが自機や床を貫通しない',()=>{
  for(const frame of frames)for(const fps of [30,60,120])for(const mode of ['combo','chargeNear','chargeFar']){
   const {config,ref}=fixture(frame),enemy=defaultConfig(0,true);enemy.passives=[];enemy.abilities=[];
-  const ownMeshes=[],paths=[[[0,.105,0],[0,.485,0]],[[0,.465,0],[0,.735,0]],...[-.16,0,.16].map(z=>[[-.30,.60,z],[.30,.60,z]])];
+  const ownMeshes=[],paths=[[[0,.105,0],[0,.485,0]],[[0,.465,0],[0,.735,0]],...[-.16,0,.16].map(z=>[[-.30,.60,z],[.30,.60,z]])].map(path=>path.map(([x,y,z])=>[x,y-HAMMER_GRIP.advance,z]));
   ref.bodyPivot.children[0].traverse(o=>{if(!o.isMesh)return;for(let p=o;p&&p!==ref.bodyPivot;p=p.parent)if(ref.arms.includes(p))return;ownMeshes.push(o);});
   ref.legGroup.traverse(o=>{if(o.isMesh)ownMeshes.push(o);});
   const torso=torsoMeshes(ref);
@@ -128,7 +151,8 @@ test('実入力の2段・満溜めで全5フレームの腕装甲・脚・大型
    clearArms(ref,torso,`${frame}/${fps}/${mode}/${u.attack?.combo}/${u.attack&&u.attack.elapsed/u.attack.duration}`);
    const bottom=new THREE.Box3().setFromObject(ref.legGroup,true).min.y;
    assert(bottom>=-1e-7,`${frame}/${fps}/${mode}/${u.attack?.combo}/${u.attack&&u.attack.elapsed/u.attack.duration}: 脚の装甲が床へ${-bottom}入る`);
-   assert(new THREE.Box3().setFromObject(ref.weaponAttachments[0],true).min.y>=0,`${frame}/${fps}/${mode}: 大型ハンマーの外形が床を貫通`);
+   const weaponBottom=new THREE.Box3().setFromObject(ref.weaponAttachments[0],true).min.y;
+   assert(weaponBottom>=0,`${frame}/${fps}/${mode}/${u.attack?.combo}/${u.attack&&u.attack.elapsed/u.attack.duration}: 大型ハンマーの外形が床へ${-weaponBottom}入る`);
    const weapon=ref.weaponAttachments[0];for(const path of paths){
     const a=weapon.localToWorld(new THREE.Vector3(...path[0])),c=weapon.localToWorld(new THREE.Vector3(...path[1])),d=c.clone().sub(a);
     assert.equal(new THREE.Raycaster(a,d.clone().normalize(),0,d.length()).intersectObjects(ownMeshes,false).length,0,`${frame}/${fps}/${mode}/${u.attack?.combo}/${u.attack&&u.attack.elapsed/u.attack.duration}: 柄やヘッドが自機を貫通`);
