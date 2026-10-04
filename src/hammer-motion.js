@@ -38,7 +38,9 @@ function at(hand,pitch,azimuth,body,hipYaw,drop,shift,weight,footYaw=[-.13,.20],
 // Approved low side guard: shoulders forward, both hands at the right hip,
 // the head trailing outside the right thigh. Roll the entire rigid grip frame,
 // never the head on its own; its central T-joint stays square to the shaft.
-const carry=at([-.105,.540,.205],1.77,-2.80,[.150,-.56,.025],-.23,-.058,[.005,.014],0,[-.13,.20],Math.PI/2);
+// The approved T-head lies across the horizontal plane. A quarter-turn of
+// the haft made the head stand upright despite keeping the haft aimed rearward.
+const carry=at([-.105,.540,.205],1.77,-2.80,[.150,-.56,.025],-.23,-.058,[.005,.014],0,[-.13,.20],Math.PI-2.80);
 function pose(f,guideElbow=false){
  const inverse=quaternion(f.body).invert(),position=new THREE.Vector3(...f.hand).sub(new THREE.Vector3(0,.36,0)).applyQuaternion(inverse).add(new THREE.Vector3(0,.36,0)),
   // Follow the shaft direction with one swing rotation, then the authored
@@ -133,7 +135,10 @@ const chargedKeys=[
 function makeClip(name,stage,keys,contact,footwork={land:.29,rearLand:.65,gatherEnd:.94,lift:.070}){
  const channels=['hand','axis','body','shift','footYaw'],values=Object.fromEntries(channels.map(c=>[c,keys.map(([t,f])=>[t,f[c]])])),
   scalar=['hipYaw','drop','weight','roll'];for(const c of scalar)values[c]=keys.map(([t,f])=>[t,[f[c]]]);
- const data=p=>{const f=Object.fromEntries(channels.map(c=>[c,curve(values[c],p)]));for(const c of scalar)f[c]=curve(values[c],p)[0];const release=ramp(p,0,.15)*(1-ramp(p,.70,.98)),lift=THREE.MathUtils.clamp((f.hand[1]-.60)*16,-.55,3);f.poles=carry.poles.map((v,i)=>new THREE.Vector3(...v).lerp(new THREE.Vector3(i?1.40:-1.40,lift,1.60).normalize(),release).normalize().toArray());f.gripLimit=90;f.upright=smooth((f.roll-1)/.3)*ramp(p,0,.05)*(1-ramp(p,.94,.995));return f;};
+ // Keep the shoulder-fin clearance timing separate from the resting head
+ // orientation. Level the head after it has returned below those fins.
+ const clearance=keys.map(([t,f])=>[t,[f===carry?Math.PI/2:f.roll]]);
+ const data=p=>{const f=Object.fromEntries(channels.map(c=>[c,curve(values[c],p)]));for(const c of scalar)f[c]=curve(values[c],p)[0];const release=ramp(p,0,.15)*(1-ramp(p,.70,.98)),lift=THREE.MathUtils.clamp((f.hand[1]-.60)*16,-.55,3);f.poles=carry.poles.map((v,i)=>new THREE.Vector3(...v).lerp(new THREE.Vector3(i?1.40:-1.40,lift,1.60).normalize(),release).normalize().toArray());f.gripLimit=90;f.upright=smooth((curve(clearance,p)[0]-1)/.3)*ramp(p,0,.05)*(1-ramp(p,.94,.995));return f;};
  const returnStart=.54,returnPath=[];let distance=0,previous;
  if(stage===0)for(let n=0;n<=240;n++){
   const p=returnStart+(1-returnStart)*n/240,f=data(p),frame=pose(f),head=new THREE.Vector3(0,.46,0).applyEuler(new THREE.Euler(...frame.shaft.rotation)).add(new THREE.Vector3(...frame.shaft.position)).sub(new THREE.Vector3(0,.36,0)).applyQuaternion(quaternion(frame.body)).add(new THREE.Vector3(frame.shift[0],.36+frame.drop,frame.shift[1]));

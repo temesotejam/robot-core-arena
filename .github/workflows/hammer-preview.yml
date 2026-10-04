@@ -29,16 +29,19 @@ jobs:
       - run: npm install --no-save --package-lock=false playwright@1.63.0
       - run: npx playwright install --with-deps chromium
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: node scripts/melee-ready-preview.cjs --weapon=hammer --before=381e9663b9b49af2c720179bbe4acba631693485
+        if: github.ref_name == 'main' || github.event_name == 'workflow_dispatch'
+      - run: node scripts/melee-ready-preview.cjs --weapon=hammer --before=7b99fc6be180ec15dbc883a62613f31989bf23d1
         env:
           MELEE_READY_OUTPUT: /tmp/hammer-preview/ready
       - run: node scripts/melee-motion-browser.cjs --weapons=hammer --matrix-only
         env:
           MELEE_REVIEW_OUTPUT: /tmp/hammer-preview/matrix
       - run: node scripts/melee-preview.cjs --weapon=hammer
+        if: github.ref_name == 'main' || github.event_name == 'workflow_dispatch'
         env:
           MELEE_PREVIEW_OUTPUT: /tmp/hammer-preview/combo
       - run: node scripts/melee-preview.cjs --weapon=hammer --charge
+        if: github.ref_name == 'main' || github.event_name == 'workflow_dispatch'
         env:
           MELEE_PREVIEW_OUTPUT: /tmp/hammer-preview/charge
       - uses: actions/upload-artifact@v4

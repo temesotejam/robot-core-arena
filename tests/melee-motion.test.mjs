@@ -140,7 +140,7 @@ test('刃・長柄の中心線は攻撃中も胴・頭・腰・脚・盾を貫�
     const a=weapon.localToWorld(new THREE.Vector3(...path[0])),b=weapon.localToWorld(new THREE.Vector3(...path[1])),d=b.clone().sub(a);
     assert.equal(new THREE.Raycaster(a,d.clone().normalize(),0,d.length()).intersectObjects(meshes,false).length,0,`${label}: 武器が自機を貫通`);
    }
-   for(const mesh of damageMeshes(ref,u.attack))assert(new THREE.Box3().setFromObject(mesh).min.y>=0,`${label}: 打撃部が床を貫通`);
+   for(const mesh of damageMeshes(ref,u.attack))assert(new THREE.Box3().setFromObject(mesh,true).min.y>=0,`${label}: 打撃部が床を貫通`);
   }
  }
 });
@@ -267,7 +267,7 @@ test('近距離・空振りの満溜めブーストが5フレームの足・打�
     const a=weapon.localToWorld(new THREE.Vector3(...path[0])),c=weapon.localToWorld(new THREE.Vector3(...path[1])),d=c.clone().sub(a);
     assert.equal(new THREE.Raycaster(a,d.clone().normalize(),0,d.length()).intersectObjects(meshes,false).length,0,`${context}: 実チャージ中に武器が自機を貫通`);
    }
-   for(const mesh of damageMeshes(ref))assert(new THREE.Box3().setFromObject(mesh).min.y>=0,`${context}: 実チャージ中に打撃部が床を貫通`);
+   for(const mesh of damageMeshes(ref))assert(new THREE.Box3().setFromObject(mesh,true).min.y>=0,`${context}: 実チャージ中に打撃部が床を貫通`);
    if(u.attack&&frame!=='panzer')for(let j=0;j<2;j++)if(f.feet[j][1]<=.035+1e-9){
     sawGround=true;const foot=ref.feet[j].foot.getWorldPosition(new THREE.Vector3());assert(Math.abs(foot.y-.035)<1e-7,`${context}/${u.attack.elapsed/u.attack.duration}/${j}: 接地する足が ${foot.y-.035} 浮く`);
    }

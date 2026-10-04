@@ -47,6 +47,19 @@ function armor(w,h,d,color,x=0,y=0,z=0){
 function glow(w,h,d,color,x=0,y=0,z=0){const mesh=box(w,h,d,color,x,y,z);mesh.material=material(color,true);return mesh;}
 function cylinder(radius,height,color,x=0,y=0,z=0,sides=12){const mesh=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,height,sides),material(color));mesh.position.set(x,y,z);mesh.castShadow=true;return mesh;}
 function sphere(radius,color,x,y,z){const mesh=new THREE.Mesh(new THREE.SphereGeometry(radius,10,6),material(color));mesh.position.set(x,y,z);return mesh;}
+function hammerHand(side){
+ const grip=new THREE.Group(),dark='#263a48';grip.name='hammerClosedHand';
+ // The haft runs along hand Y; hand Z continues the forearm. Leave a real
+ // central opening, and close four separate fingers around the solid haft.
+ grip.add(armor(.063,.064,.016,dark,0,0,-.036),armor(.052,.047,.012,'#435c6d',0,0,-.047));
+ for(let i=0;i<4;i++){
+  const y=(i-1.5)*.016,finger=new THREE.Group();finger.name=`hammerFinger${i}`;
+  finger.add(armor(.014,.012,.061,dark,-.037,y,.005),armor(.014,.012,.061,dark,.037,y,.005),armor(.065,.012,.014,dark,0,y,.038));
+  grip.add(finger);
+ }
+ const thumb=armor(.019,.030,.028,'#344d5e',-side*.039,.025,.017);thumb.rotation.z=side*.35;thumb.name='hammerThumb';grip.add(thumb);
+ grip.visible=false;return grip;
+}
 function weaponModel(kind,team){const group=new THREE.Group(),w=WEAPONS[kind],metal='#b7c9d4',dark='#263746',accent=team?'#ffac72':'#77f6d6';group.name=`weapon:${kind}`;
  // Fixed edge orientation in the grip; normal cuts do not rotate the weapon
  // independently from its hand. The blade's local X axis is its cutting edge.
@@ -277,7 +290,7 @@ export function createRobot(config,getItem,team=0){const root=new THREE.Group(),
   const sw=frame==='brawler'?.092:frame==='panzer'?.088:frame==='strider'?.062:.079;arm.userData.hammerShoulderClearance=Math.max(0,wide+.012+sw*.80+.008-.24);arm.shoulder=new THREE.Group();arm.shoulder.add(plate([[-sw*.80,.041],[-sw*.40,.078],[sw*.65,.059],[sw*1.08,.016],[sw*.80,-.052],[-sw*.69,-.030]].map(([x,y])=>[side*x,y]),.144,color,0,.005,0,.008),plate([[-sw*.48,.070],[sw*.61,.052],[sw*.85,.031],[sw*.52,.040],[-sw*.45,.057]].map(([x,y])=>[side*x,y]),.155,accent,0,.005,0,.002));arm.add(arm.shoulder);
   arm.upper=new THREE.Group();arm.upper.add(box(.052,ARM_LENGTH,.055,'#263541',0,-ARM_LENGTH/2,0),plate([[-.038,.046],[.038,.046],[.033,-.045],[-.033,-.045]],.084,color,0,-.099,0,.005));if(frame==='strider')arm.upper.add(glow(.012,.065,.012,accent,side*.043,-.105,.048));
   arm.elbow=sphere(.034,'#263541',0,0,0);arm.lower=new THREE.Group();const fw=frame==='brawler'?.069:frame==='panzer'?.066:frame==='strider'?.045:.057;arm.lower.add(plate([[-fw*.64,.063],[fw*.64,.063],[fw,.025],[fw*.92,-.065],[fw*.59,-.085],[-fw*.59,-.085],[-fw*.92,-.065],[-fw,.025]],.108,color,0,-.101,0,.007),plate([[-.017,.039],[.017,.039],[.012,-.026],[-.012,-.026]],.013,accent,0,-.105,.062,.002));if(frame==='wild')arm.lower.add(box(.035,.08,.045,accent,side*.068,-.1,0));
-  arm.hand=new THREE.Group();arm.hand.name=n===0?'rightHand':'leftHand';arm.hand.add(box(.07,.065,.07,'#1f303d'));arm.add(arm.upper,arm.elbow,arm.lower,arm.hand);bodyRig.add(arm);refs.arms.push(arm);}
+  arm.hand=new THREE.Group();arm.hand.name=n===0?'rightHand':'leftHand';arm.defaultHand=box(.07,.065,.07,'#1f303d');arm.hand.add(arm.defaultHand);arm.add(arm.upper,arm.elbow,arm.lower,arm.hand);bodyRig.add(arm);refs.arms.push(arm);}
  const [legColor,legAccent]=colors('legs'),legFrame=item('legs').frame;const legs=new THREE.Group();root.add(legs);refs.legGroup=legs;refs.legFrame=legFrame;
  for(const mesh of [...bodyRig.children])if(mesh.name==='pelvisArmour')legs.add(mesh);
  if(legFrame==='panzer')legs.add(armor(.13,.19,.12,'#273644',0,.315,0),armor(.36,.042,.11,'#344b5b',0,.241,0));
@@ -295,7 +308,7 @@ export function createRobot(config,getItem,team=0){const root=new THREE.Group(),
   }legs.add(leg);refs.feet.push(leg);
  }
  if(legFrame==='wild'){const tail=box(.045,.045,.3,legAccent,0,.2,-.24);tail.rotation.x=-.25;legs.add(tail);refs.tail=tail;}const ring=new THREE.Mesh(new THREE.RingGeometry(.35,.38,32),new THREE.MeshBasicMaterial({color:teamColor,transparent:true,opacity:.65,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.015;root.add(ring);refs.ring=ring;
- refs.addWeapons=(set)=>{const kind=getItem(set.item).kind,wm=weaponModel(kind,team);refs.arms[0].hand.add(wm);refs.weaponAttachments=[wm];refs.hasShield=false;
+ refs.addWeapons=(set)=>{const kind=getItem(set.item).kind,wm=weaponModel(kind,team);for(const arm of refs.arms){arm.defaultHand.visible=kind!=='hammer';if(kind==='hammer'){arm.hammerHand??=hammerHand(arm.userData.side);arm.hammerHand.visible=true;arm.hand.add(arm.hammerHand);}else arm.hammerHand?.removeFromParent();}refs.arms[0].hand.add(wm);refs.weaponAttachments=[wm];refs.hasShield=false;
   if(['dualSword','dualGun','knuckle'].includes(kind)){const left=weaponModel(kind,team);refs.arms[1].hand.add(left);refs.weaponAttachments.push(left);}
   else if(set.shield&&WEAPONS[kind].shield){const shield=new THREE.Group();shield.name='shield';shield.add(armor(.19,.3,.035,bodyColor,0,.055,.06),glow(.025,.22,.04,teamColor,0,.055,.085));refs.arms[1].hand.add(shield);refs.weaponAttachments.push(shield);refs.hasShield=true;}
   refs.weaponTrails=refs.weaponAttachments.filter(a=>a.userData.trailTip).map(weapon=>{const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(12*6*3),3).setUsage(THREE.DynamicDrawUsage));geometry.setDrawRange(0,0);const mesh=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({color:teamColor,transparent:true,opacity:.28,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));mesh.frustumCulled=false;mesh.visible=false;root.add(mesh);return {weapon,mesh,samples:[]};});refs.kind=kind;poseWeapons(refs);};

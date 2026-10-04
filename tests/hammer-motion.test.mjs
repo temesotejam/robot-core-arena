@@ -54,13 +54,13 @@ test('大型ハンマーを腰の横から後ろへ低く構え、肩を前へ�
   assert(axis.z<-.80&&axis.y<-.10,'柄を低い後方へ向けない');
   const approved=new THREE.Vector3(Math.sin(1.77)*Math.sin(-2.80),Math.cos(1.77),Math.sin(1.77)*Math.cos(-2.80));
   assert(axis.distanceTo(approved)<1e-9,'了承された下段構えから柄の方向を変える');
-  const approvedHead=new THREE.Vector3(1,0,0).applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),approved).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI/2)));
+  const approvedHead=new THREE.Vector3().crossVectors(approved,new THREE.Vector3(0,1,0)).normalize();
   assert(new THREE.Vector3(1,0,0).transformDirection(w.matrixWorld).distanceTo(approvedHead)<1e-9,'了承された構えからヘッドを回す');
   for(const arm of ref.arms){const neutral=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2),wrist=arm.lower.quaternion.clone().invert().multiply(arm.hand.quaternion);assert(wrist.angleTo(neutral)<=18*Math.PI/180+1e-7,'通常構えで手首を折り過ぎる');}
   assert(head.y<grip.y-.075&&head.y>.28&&head.z<point(ref.arms[1].hand).z-.45,'肩に担ぐか、正面へ構える');
   assert(grip.y>.42&&grip.y<.52,'両手の握りを腰の高さへ下げない');
   const crossbar=w.localToWorld(new THREE.Vector3(.245,.60,0)).sub(w.localToWorld(new THREE.Vector3(-.245,.60,0))).normalize();
-  assert(Math.abs(axis.dot(crossbar))<1e-10&&Math.abs(crossbar.y)>.80,'ヘッドの中央の直角接続や構えの向きを崩す');
+  assert(Math.abs(axis.dot(crossbar))<1e-10&&Math.abs(crossbar.y)<1e-10,'了承された横向きのT字ヘッドを縦に立てる');
   const local=new THREE.Box3();for(const mesh of w.children.filter(m=>m.isMesh)){mesh.geometry.computeBoundingBox();local.union(mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrix));}
   const size=local.getSize(new THREE.Vector3());assert(size.x>.55&&size.y>.78&&size.z>.32,'大型の厚い打撃面を持たない');
   assert(ready.body[0]>.12&&Math.abs(ready.body[1])>.25&&ready.drop<-.045,'肩が前へ出ず、胸と腰が直立したまま');
