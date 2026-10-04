@@ -17,6 +17,32 @@ function fixture(frame='knight'){
 const point=o=>o.getWorldPosition(new THREE.Vector3());
 function draw(ref,u,time=0){ArenaRenderer.prototype.animateRobot.call({},ref,u,time);ref.root.updateMatrixWorld(true);}
 const sample=(combo,p,charge=0)=>sampleMotion('hammer',{combo,charge,elapsed:p,duration:1});
+const geometryChecks=new Map();
+function shell(geometry){
+ if(geometryChecks.has(geometry))return geometryChecks.get(geometry);
+ geometry.computeBoundingBox();const positions=geometry.attributes.position,index=geometry.index,vertices=new Map(),planes=[];
+ for(let i=0;i<positions.count;i++){const v=new THREE.Vector3().fromBufferAttribute(positions,i);vertices.set(v.toArray().map(n=>n.toFixed(6)).join('/'),v);}
+ for(let i=0;i<(index?.count??positions.count);i+=3){const v=[0,1,2].map(j=>new THREE.Vector3().fromBufferAttribute(positions,index?index.getX(i+j):i+j)),plane=new THREE.Plane().setFromCoplanarPoints(...v);if(plane.normal.lengthSq()>.5&&!planes.some(p=>p.normal.dot(plane.normal)>.999999&&Math.abs(p.constant-plane.constant)<1e-7))planes.push(plane);}
+ const result={vertices:[...vertices.values()],planes};geometryChecks.set(geometry,result);return result;
+}
+function torsoMeshes(ref){
+ const meshes=[];ref.bodyPivot.children[0].traverse(o=>{if(!o.isMesh)return;for(let p=o;p&&p!==ref.bodyPivot;p=p.parent)if(ref.arms.includes(p))return;meshes.push(o);});return meshes;
+}
+function clearArms(ref,meshes,label){
+ const targets=meshes.map(mesh=>({mesh,inverse:new THREE.Matrix4().copy(mesh.matrixWorld).invert(),planes:shell(mesh.geometry).planes}));
+ for(const [side,arm]of ref.arms.entries()){
+  for(const [name,part]of [['upper',arm.upper],['lower',arm.lower],['hand',arm.hand],['shoulder',arm.shoulder],['elbow',arm.elbow]])part.traverse(mesh=>{
+   if(!mesh.isMesh)return;
+   for(const vertex of shell(mesh.geometry).vertices){const world=vertex.clone().applyMatrix4(mesh.matrixWorld);
+    for(const {mesh:target,inverse,planes}of targets){const local=world.clone().applyMatrix4(inverse);if(!target.geometry.boundingBox.containsPoint(local))continue;
+     // Closed convex armour faces, rather than a torso's coarse world box.
+     assert(!planes.every(plane=>plane.distanceToPoint(local)<-1e-5),`${label}/${side}/${name}: 腕の装甲が胴・頭の実形状へ埋まる`);
+    }
+   }
+  });
+  for(const [a,b]of [[point(arm),point(arm.elbow)],[point(arm.elbow),point(arm.hand)]]){const d=b.clone().sub(a);assert.equal(new THREE.Raycaster(a,d.clone().normalize(),.008,d.length()-.008).intersectObjects(meshes,false).length,0,`${label}/${side}: 腕の骨が胴・頭を横切る`);}
+ }
+}
 
 test('大型ハンマーを腰の横から後ろへ低く構え、肩を前へ出して両手で支える',()=>{
  for(const frame of frames){
@@ -83,12 +109,13 @@ test('通常の先行入力と満溜め解除は準備済みの全身を引き�
  assert.deepEqual(released.body,held.body);
 });
 
-test('実入力の2段・満溜めで全5フレームの脚と大型ハンマーが床や自機を貫通しない',()=>{
+test('実入力の2段・満溜めで全5フレームの腕装甲・脚・大型ハンマーが自機や床を貫通しない',()=>{
  for(const frame of frames)for(const fps of [30,60,120])for(const mode of ['combo','chargeNear','chargeFar']){
   const {config,ref}=fixture(frame),enemy=defaultConfig(0,true);enemy.passives=[];enemy.abilities=[];
   const ownMeshes=[],paths=[[[0,.105,0],[0,.485,0]],[[0,.465,0],[0,.735,0]],...[-.16,0,.16].map(z=>[[-.30,.60,z],[.30,.60,z]])];
   ref.bodyPivot.children[0].traverse(o=>{if(!o.isMesh)return;for(let p=o;p&&p!==ref.bodyPivot;p=p.parent)if(ref.arms.includes(p))return;ownMeshes.push(o);});
   ref.legGroup.traverse(o=>{if(o.isMesh)ownMeshes.push(o);});
+  const torso=torsoMeshes(ref);
   const b=new Battle({allies:[config],enemies:[enemy],setup:{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true},getItem:id=>CATALOG[id],rng:()=>.99});b.countdown=0;b.training.freezeAI=true;
   const u=b.human,v=b.entities[1],charged=mode!=='combo',stages=charged?1:2,holdFrames=charged?Math.ceil(b.maxCharge(u)*fps)+1:1;
   Object.assign(u,{x:0,z:0,yaw:0,target:v.id});Object.assign(v,{x:0,z:mode==='chargeFar'?5:.9,yaw:Math.PI});
@@ -98,6 +125,7 @@ test('実入力の2段・満溜めで全5フレームの脚と大型ハンマー
    const rt=b.runtime(u),a=u.attack,input={},first=n>=fps*.5&&!starts&&!a&&!u.motion&&held<holdFrames,follow=a&&a.combo<stages-1&&u.comboHit&&!u.queuedAttack&&rt.cooldown<=.14&&rt.cooldown>0;
    if(charged){if(first){input.attack=true;held++;}}else if(pressing)pressing=false;else if(first||follow){input.attack=true;pressing=true;held++;}
    b.tick(1/fps,input);b.consumeEvents();draw(ref,u,b.time);
+   clearArms(ref,torso,`${frame}/${fps}/${mode}/${u.attack?.combo}/${u.attack&&u.attack.elapsed/u.attack.duration}`);
    const bottom=new THREE.Box3().setFromObject(ref.legGroup,true).min.y;
    assert(bottom>=-1e-7,`${frame}/${fps}/${mode}/${u.attack?.combo}/${u.attack&&u.attack.elapsed/u.attack.duration}: 脚の装甲が床へ${-bottom}入る`);
    assert(new THREE.Box3().setFromObject(ref.weaponAttachments[0],true).min.y>=0,`${frame}/${fps}/${mode}: 大型ハンマーの外形が床を貫通`);
@@ -108,5 +136,16 @@ test('実入力の2段・満溜めで全5フレームの脚と大型ハンマー
    if(starts===stages&&!u.attack&&!u.motion){ended??=b.time;if(b.time-ended>=.25)break;}
   }
   assert.equal(starts,stages);assert(ended!==null);
+ }
+});
+
+test('両手の下段構えは歩行・停止でも接続を保ち、支える腕を胴へ戻さない',()=>{
+ for(const frame of frames){
+  const {ref,u}=fixture(frame),torso=torsoMeshes(ref);
+  for(let n=0;n<150;n++){
+   u.vx=n<120?.45*Math.sin(n/30):0;u.vz=n<120?.8:0;u.x+=u.vx/60;u.z+=u.vz/60;draw(ref,u,n/60);
+   clearArms(ref,torso,`${frame}/walk-stop/${n}`);
+   const w=ref.weaponAttachments[0];assert(point(w).distanceTo(point(ref.arms[0].hand))<1e-9);assert(w.localToWorld(new THREE.Vector3(...w.userData.supportGrip)).distanceTo(point(ref.arms[1].hand))<1e-8,'歩行中に支える手が柄から離れる');
+  }
  }
 });

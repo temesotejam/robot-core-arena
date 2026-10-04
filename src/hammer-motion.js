@@ -11,6 +11,9 @@ const smooth=x=>{x=clamp(x);return x*x*(3-2*x);};
 const ramp=(p,a,b)=>smooth((p-a)/(b-a));
 const quaternion=r=>new THREE.Quaternion().setFromEuler(new THREE.Euler(...r));
 const baseFeet=[[-.16,.035,-.105],[.16,.035,.125]];
+// Protract both connected shoulder sockets; keep a bend reserve and route the
+// wrists and elbow planes in front of the breastplate, including wide frames.
+const clavicles=[[-.014,0,.105],[.014,0,.105]];
 
 // A shape-preserving cubic keeps the rigid shaft moving through an impact
 // landmark. Only an actual reversal or the final carry settles to zero speed.
@@ -33,21 +36,24 @@ function at(hand,pitch,azimuth,body,hipYaw,drop,shift,weight,footYaw=[-.13,.20],
 // Approved low side guard: shoulders forward, both hands at the right hip,
 // the head trailing outside the right thigh. Roll the entire rigid grip frame,
 // never the head on its own; its central T-joint stays square to the shaft.
-const carry=at([-.080,.540,.025],1.77,-2.80,[.150,-.56,.025],-.23,-.058,[.005,.014],0,[-.13,.20],Math.PI/2);
+const carry=at([-.080,.540,.205],1.77,-2.80,[.150,-.56,.025],-.23,-.058,[.005,.014],0,[-.13,.20],Math.PI/2);
 function pose(f){
  const inverse=quaternion(f.body).invert(),position=new THREE.Vector3(...f.hand).sub(new THREE.Vector3(0,.36,0)).applyQuaternion(inverse).add(new THREE.Vector3(0,.36,0)),
   // Follow the shaft direction with one swing rotation, then the authored
   // grip roll. This preserves the mounting angle and both hand sockets.
   shaft=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(...f.axis).normalize()).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),f.roll)),
   localShaft=inverse.multiply(shaft),e=new THREE.Euler().setFromQuaternion(localShaft),support=new THREE.Vector3(0,.09,0).applyQuaternion(localShaft),
-  centres=[new THREE.Vector3(-.24,.66,0),new THREE.Vector3(.24,.66,0).sub(support)];
- // Project the *whole grip frame* into the two arms' common reach. This keeps
- // one rigid shaft and fixed bone lengths, including the opposite-side load.
+  centres=clavicles.map((v,i)=>new THREE.Vector3(i?.24:-.24,.66,0).add(new THREE.Vector3(...v)).sub(i?support:new THREE.Vector3()));
+ // Project the *whole grip frame* into the two arms' common, bent-arm reach
+ // and front clearance half-space. Both fixed wrists remain on one rigid haft.
  // The shared one-hand IK alone would clamp a supporting wrist off the haft.
- for(let n=0;n<12;n++)for(const centre of centres){const offset=position.clone().sub(centre);if(offset.length()>.386)position.copy(centre).add(offset.setLength(.386));}
+ for(let n=0;n<24;n++){
+  for(const centre of centres){const offset=position.clone().sub(centre);if(offset.length()>.365)position.copy(centre).add(offset.setLength(.365));}
+  position.z=Math.max(position.z,.25-Math.min(0,support.z));
+ }
  return {...meleePose({right:{position:position.toArray(),rotation:[e.x,e.y,e.z]},twoHand:true,
   body:f.body,head:[-f.body[0]*.85,-f.body[1]*.94,-f.body[2]*.7],hipYaw:f.hipYaw,drop:f.drop,shift:f.shift,weight:f.weight,
-  feet:baseFeet.map(v=>[...v]),footYaw:f.footYaw,poles:[[-.74,-.65,-.80],[.74,-.65,-.80]]}),tailClearance:true};
+  feet:baseFeet.map(v=>[...v]),footYaw:f.footYaw,poles:[[-1.40,-.55,1.60],[1.40,-.55,1.60]],clavicles}),tailClearance:true};
 }
 const ready=pose(carry);
 // Low rear guard -> right-side load -> front target -> left hip. The hips
@@ -60,11 +66,11 @@ const sweepKeys=[
  [.28,at([-.025,.695,.210],-.40,1.15,[-.040,-.66,.043],-.16,-.093,[.022,-.010],.93)],
  [.335,at([-.025,.630,.245],1.24,-.15,[.060,-.42,.020],.29,-.086,[.006,.028],1)],
  [.395,at([-.005,.605,.265],1.60,.20,[.125,.09,-.030],.53,-.090,[-.009,.049],1)],
- [.48,at([.012,.670,.200],1.80,.85,[.170,.68,-.050],.60,-.080,[-.019,.062],1,[.17,.27])],
- [.54,at([.010,.680,.190],1.82,1.04,[.155,.79,-.046],.47,-.074,[-.014,.047],.74,[.20,.25])],
- [.69,at([.005,.650,.245],1.35,.30,[.110,.40,-.015],.22,-.064,[-.006,.022],.42,[-.13,.20],.35)],
- [.85,at([-.035,.550,.250],1.62,-1.50,[.130,-.35,.022],-.13,-.061,[.002,.013],.22,[-.13,.20],.90)],
- [.94,at([-.060,.565,.055],1.67,-2.40,[.140,-.50,.024],-.20,-.058,[.005,.006],.08,[-.13,.20],1.25)],
+ [.48,at([.012,.695,.200],1.80,.85,[.170,.68,-.050],.60,-.080,[-.019,.062],1,[.17,.27])],
+ [.54,at([.010,.705,.190],1.82,1.04,[.155,.79,-.046],.47,-.074,[-.014,.047],.74,[.20,.25])],
+ [.63,at([.005,.650,.245],1.35,.30,[.110,.40,-.015],.22,-.064,[-.006,.022],.42,[-.13,.20],.35)],
+ [.83,at([-.035,.550,.250],1.62,-1.50,[.130,-.35,.022],-.13,-.061,[.002,.013],.22,[-.13,.20],.90)],
+ [.94,at([-.060,.565,.205],1.67,-2.40,[.140,-.50,.024],-.20,-.058,[.005,.006],.08,[-.13,.20],1.25)],
  [.98,carry],[1,carry],
 ];
 // The first cut's follow-through gathers up the left side for a diagonal
@@ -81,7 +87,7 @@ const slamKeys=[
  [.48,at([-.018,.710,.185],1.90,-.86,[.245,-.65,.048],-.54,-.102,[.016,.067],1,[-.25,.06])],
  [.60,at([-.020,.710,.155],1.90,-1.04,[.205,-.69,.042],-.38,-.094,[.010,.046],.72,[-.23,.06])],
  [.75,at([-.050,.575,.170],1.62,-1.70,[.150,-.56,.030],-.25,-.068,[.006,.012],.34,[-.13,.20],.90)],
- [.86,at([-.060,.570,.045],1.55,-2.80,[.150,-.58,.027],-.24,-.060,[.005,.006],.10,[-.13,.20],1.20)],
+ [.86,at([-.060,.570,.205],1.55,-2.80,[.150,-.58,.027],-.24,-.060,[.005,.006],.10,[-.13,.20],1.20)],
  [.95,carry],[1,carry],
 ];
 // A longer rear-side load and one deep descending cut. Do not twirl or reset
@@ -98,7 +104,7 @@ const chargedKeys=[
  [.60,at([.005,.740,.160],1.96,.75,[.235,.65,-.039],.36,-.102,[-.011,.048],.74,[.12,.28])],
  [.73,at([.005,.700,.250],1.36,.22,[.130,.28,-.015],.12,-.073,[-.005,.017],.42,[-.13,.20],.30)],
  [.82,at([-.035,.575,.250],1.62,-1.50,[.150,-.40,.025],-.18,-.061,[.002,.013],.22,[-.13,.20],.90)],
- [.90,at([-.060,.565,.055],1.66,-2.40,[.140,-.50,.024],-.20,-.059,[.003,.006],.08,[-.13,.20],1.25)],
+ [.90,at([-.060,.565,.205],1.66,-2.40,[.140,-.50,.024],-.20,-.059,[.003,.006],.08,[-.13,.20],1.25)],
  [.96,carry],[1,carry],
 ];
 function makeClip(name,stage,keys,contact,footwork={land:.29,rearLand:.65,gatherEnd:.94,lift:.070}){

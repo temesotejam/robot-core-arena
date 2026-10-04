@@ -5,6 +5,7 @@ on:
       - src/hammer-motion.js
       - src/render.js
       - src/melee-motion.js
+      - src/melee-pose.js
       - scripts/melee-preview.cjs
       - scripts/melee-ready-preview.cjs
       - tests/hammer-motion.test.mjs
@@ -27,7 +28,7 @@ jobs:
       - run: npm install --no-save --package-lock=false playwright@1.63.0
       - run: npx playwright install --with-deps chromium
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: node scripts/melee-ready-preview.cjs --weapon=hammer --before=b520b147271333806ea96190b38bb9acf759be44
+      - run: node scripts/melee-ready-preview.cjs --weapon=hammer --before=9402bfa6d8c5ebcaa96a20f4430622db622eccd8
         env:
           MELEE_READY_OUTPUT: /tmp/hammer-preview/ready
       - run: node scripts/melee-motion-browser.cjs --weapons=hammer --matrix-only

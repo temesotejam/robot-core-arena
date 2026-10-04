@@ -91,7 +91,7 @@ function weaponModel(kind,team){const group=new THREE.Group(),w=WEAPONS[kind],me
 }
 const ARM_LENGTH=.195,DOWN=new THREE.Vector3(0,-1,0);
 function poseArm(arm,target,rotation){
- arm.position.set(arm.userData.side*.24,.66,0);arm.shoulder.rotation.set(0,0,0);
+ arm.position.set(arm.userData.side*.24,.66,0);arm.shoulder.position.x=0;arm.shoulder.rotation.set(0,0,0);
  const wrist=target.clone().sub(arm.position),distance=Math.min(wrist.length(),ARM_LENGTH*2-.001);wrist.setLength(distance);
  const direction=wrist.clone().normalize(),pole=new THREE.Vector3(arm.userData.side*.35,-.8,-.35);pole.addScaledVector(direction,-pole.dot(direction));if(pole.lengthSq()<1e-8)pole.set(arm.userData.side,0,0);pole.normalize();
  const elbow=wrist.clone().multiplyScalar(.5).addScaledVector(pole,Math.sqrt(ARM_LENGTH**2-(distance/2)**2));
@@ -99,12 +99,18 @@ function poseArm(arm,target,rotation){
  arm.lower.position.copy(elbow);arm.lower.quaternion.setFromUnitVectors(DOWN,wrist.clone().sub(elbow).normalize());
  arm.hand.position.copy(wrist);arm.hand.rotation.copy(rotation);
 }
-function poseSwordArm(arm,joint){
+function poseSwordArm(arm,joint,swingShoulder=false){
  const f=swordArm(joint);arm.position.set(joint.side*.24+joint.clavicle[0],.66+joint.clavicle[1],joint.clavicle[2]);
  arm.upper.quaternion.copy(f.upper);arm.elbow.position.copy(f.elbow);arm.lower.position.copy(f.elbow);arm.lower.quaternion.copy(f.lower);arm.hand.position.copy(f.wrist);arm.hand.quaternion.copy(f.hand);
  // Floating shoulder armour follows the raised upper arm without rotating the
  // shoulder joint itself or pushing the elbow out to satisfy a wrist target.
- arm.shoulder.quaternion.identity().slerp(f.upper,.42);
+ if(swingShoulder){
+  // A floating hammer pauldron tilts forward with the lift, without inheriting
+  // the hinge-plane twist that tips its inner edge through a wide breastplate.
+  const direction=DOWN.clone().applyQuaternion(f.upper);
+  arm.shoulder.position.x=joint.side*arm.userData.hammerShoulderClearance;
+  arm.shoulder.rotation.set(THREE.MathUtils.clamp(Math.atan2(-direction.z,-direction.y)*.32,-.70,.25),0,0);
+ }else {arm.shoulder.position.x=0;arm.shoulder.quaternion.identity().slerp(f.upper,.42);}
 }
 function walkingJoint(joint,gait){
  if(!gait)return joint;
@@ -196,9 +202,11 @@ function poseWeapons(ref,u=null,time=0,locomotion=null,landing=null){
  for(const weapon of ref.weaponAttachments)if(weapon.userData.flash)weapon.userData.flash.visible=!!shot&&shotProgress<.3&&!u.dead&&!u.guard;
  for(const [i,arm]of ref.arms.entries()){
   if(motion.joints&&(!u?.guard||w.id==='knuckle')&&(!u?.charging||attack||motion.name==='chargeHold')&&!u?.dead&&!(u?.down>0)){
-   let joint=walkingJoint(motion.joints[i?'left':'right'],!attack&&!u?.charging&&!u?.guard?locomotion?.arms?.[i]:null);
+   // A heavy two-hand grip keeps one connected carry during gait. Independent
+   // arm swings, or the legacy supporting-hand IK, fold its elbow into the chest.
+   let joint=walkingJoint(motion.joints[i?'left':'right'],!attack&&!u?.charging&&!u?.guard&&!(w.id==='hammer'&&motion.twoHand)?locomotion?.arms?.[i]:null);
    if(i===1&&ref.hasShield&&landing?.guard)joint=walkingJoint(joint,{rotation:[-.24*landing.guard,-.08*landing.guard,-.06*landing.guard],bend:.20*landing.guard,clavicle:[0,0,0]});
-   poseSwordArm(arm,joint);continue;
+   poseSwordArm(arm,joint,w.id==='hammer');continue;
   }
   const side=arm.userData.side,armed=i===0||dual,p=armed&&!w.ranged?(i?motion.left:motion.right):readyPose(w.id,side),target=new THREE.Vector3(...p.position),rotation=new THREE.Euler(...p.rotation);
   if(armed&&w.ranged){const handRecoil=w.id==='dualGun'&&i===1?pulse((shotProgress-.12)/.88)*kick(w.id):recoil;target.z-=handRecoil;target.y+=handRecoil*.22;rotation.x=-handRecoil*(['pistol','shotgun','dualGun'].includes(w.id)?3.2:1.4);}
@@ -209,7 +217,7 @@ function poseWeapons(ref,u=null,time=0,locomotion=null,landing=null){
   poseArm(arm,target,rotation);
  }
  // Keep both wrists within reach while following a two-handed weapon.
- if(!(motion.twoHand&&(attack||motion.name==='chargeHold')&&!u?.guard&&!u?.dead&&!(u?.down>0)))supportWeapon(ref);
+ if(!(motion.twoHand&&(attack||motion.name==='chargeHold'||w.id==='hammer')&&!u?.guard&&!u?.dead&&!(u?.down>0)))supportWeapon(ref);
  if(shot){motion.body[0]-=recoil*2;motion.drop=-recoil*.25;motion.shift[1]-=recoil*.6;}
  return motion;
 }
@@ -254,7 +262,7 @@ export function createRobot(config,getItem,team=0){const root=new THREE.Group(),
  if(headFrame==='wild')for(const side of [-1,1]){const ear=plate([[-.03,-.04],[.03,-.04],[.026,.095],[0,.145]],.05,headAccent,side*.075,.075,-.035);ear.rotation.z=-side*.3;head.add(ear);}
  if(headFrame==='brawler')head.add(armor(.245,.035,.195,headAccent,0,.06,.002));if(headFrame==='panzer')head.add(armor(.20,.045,.17,'#364451',0,.10,0));bodyRig.add(head);refs.head=head;
  for(const [n,p]of ['rightArm','leftArm'].entries()){const side=n===0?-1:1,[color,accent]=colors(p),frame=item(p).frame,arm=new THREE.Group();arm.position.set(side*.24,.66,0);arm.userData.side=side;
-  const sw=frame==='brawler'?.092:frame==='panzer'?.088:frame==='strider'?.062:.079;arm.shoulder=new THREE.Group();arm.shoulder.add(plate([[-sw*.80,.041],[-sw*.40,.078],[sw*.65,.059],[sw*1.08,.016],[sw*.80,-.052],[-sw*.69,-.030]].map(([x,y])=>[side*x,y]),.144,color,0,.005,0,.008),plate([[-sw*.48,.070],[sw*.61,.052],[sw*.85,.031],[sw*.52,.040],[-sw*.45,.057]].map(([x,y])=>[side*x,y]),.155,accent,0,.005,0,.002));arm.add(arm.shoulder);
+  const sw=frame==='brawler'?.092:frame==='panzer'?.088:frame==='strider'?.062:.079;arm.userData.hammerShoulderClearance=Math.max(0,wide+.012+sw*.80+.008-.24);arm.shoulder=new THREE.Group();arm.shoulder.add(plate([[-sw*.80,.041],[-sw*.40,.078],[sw*.65,.059],[sw*1.08,.016],[sw*.80,-.052],[-sw*.69,-.030]].map(([x,y])=>[side*x,y]),.144,color,0,.005,0,.008),plate([[-sw*.48,.070],[sw*.61,.052],[sw*.85,.031],[sw*.52,.040],[-sw*.45,.057]].map(([x,y])=>[side*x,y]),.155,accent,0,.005,0,.002));arm.add(arm.shoulder);
   arm.upper=new THREE.Group();arm.upper.add(box(.052,ARM_LENGTH,.055,'#263541',0,-ARM_LENGTH/2,0),plate([[-.038,.046],[.038,.046],[.033,-.045],[-.033,-.045]],.084,color,0,-.099,0,.005));if(frame==='strider')arm.upper.add(glow(.012,.065,.012,accent,side*.043,-.105,.048));
   arm.elbow=sphere(.034,'#263541',0,0,0);arm.lower=new THREE.Group();const fw=frame==='brawler'?.069:frame==='panzer'?.066:frame==='strider'?.045:.057;arm.lower.add(plate([[-fw*.64,.063],[fw*.64,.063],[fw,.025],[fw*.92,-.065],[fw*.59,-.085],[-fw*.59,-.085],[-fw*.92,-.065],[-fw,.025]],.108,color,0,-.101,0,.007),plate([[-.017,.039],[.017,.039],[.012,-.026],[-.012,-.026]],.013,accent,0,-.105,.062,.002));if(frame==='wild')arm.lower.add(box(.035,.08,.045,accent,side*.068,-.1,0));
   arm.hand=new THREE.Group();arm.hand.name=n===0?'rightHand':'leftHand';arm.hand.add(box(.07,.065,.07,'#1f303d'));arm.add(arm.upper,arm.elbow,arm.lower,arm.hand);bodyRig.add(arm);refs.arms.push(arm);}
