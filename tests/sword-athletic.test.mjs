@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as THREE from '../vendor/three.module.min.js';
 import {Battle} from '../src/sim.js';
 import {sampleMotion,stepPhase,motionRhythm} from '../src/motion.js';
-import {createRobot,ArenaRenderer} from '../src/render.js';
+import {createRobot,ArenaRenderer,ROBOT_PROPORTIONS} from '../src/render.js';
 import {defaultConfig} from '../src/customize.js';
 import {CATALOG,PARTS} from '../src/data.js';
 
@@ -58,7 +58,7 @@ test('各段の着地姿勢を変えても支持足を固定し、回収の踏�
    for(let j=0;j<2;j++){
     if(f.feet[j][1]>.035+1e-9){anchors[j]=null;if(p>.74&&p<.94&&j===1)recoveryLift=true;}
     else {contacts++;anchors[j]??=points[j].clone();assert(points[j].distanceTo(anchors[j])<1e-7,`${frame}/${combo}/${p}/${j}: 支持足が滑る`);}
-    const leg=ref.feet[j],knee=leg.upper.localToWorld(new THREE.Vector3(0,-.155,0)),ankle=leg.lower.localToWorld(new THREE.Vector3(0,-.17,0));
+    const leg=ref.feet[j],knee=leg.upper.localToWorld(new THREE.Vector3(0,-ROBOT_PROPORTIONS.thigh,0)),ankle=leg.lower.localToWorld(new THREE.Vector3(0,-ROBOT_PROPORTIONS.shin,0));
     assert(knee.distanceTo(leg.knee.getWorldPosition(new THREE.Vector3()))<1e-8);assert(ankle.distanceTo(points[j])<1e-8);
    }
    assert(contacts>=1,'通常攻撃で両足を同時に浮かせる');low=Math.min(low,ref.bodyPivot.position.y);high=Math.max(high,ref.bodyPivot.position.y);

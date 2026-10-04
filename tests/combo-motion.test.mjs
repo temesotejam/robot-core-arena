@@ -4,7 +4,7 @@ import {Battle} from '../src/sim.js';
 import {CATALOG,PARTS,WEAPONS} from '../src/data.js';
 import {defaultConfig} from '../src/customize.js';
 import {COMBO_CLIPS,sampleMotion,motionRhythm} from '../src/motion.js';
-import {createRobot,ArenaRenderer} from '../src/render.js';
+import {createRobot,ArenaRenderer,ROBOT_PROPORTIONS} from '../src/render.js';
 import * as THREE from '../vendor/three.module.min.js';
 function battle(kind='sword',frame='knight'){
  const c=defaultConfig();c.armor=Object.fromEntries(PARTS.map(p=>[p,`armor:${frame}:${p}`]));c.sets[0]={item:`weapon:${kind}`,shield:null};
@@ -111,7 +111,7 @@ test('全身の脚関節がつながり、待機・歩行・コンボで足が�
   for(const combo of [-1,...COMBO_CLIPS[kind].map((_,i)=>i)])for(let i=0;i<=24;i++){
    u.attack=combo<0?null:{weapon:kind,combo,elapsed:i/24,duration:1};u.vx=combo<0?4:0;ArenaRenderer.prototype.animateRobot.call({},ref,u,i/24);ref.root.updateMatrixWorld(true);
    for(const leg of ref.feet){
-    const knee=leg.upper.localToWorld(new THREE.Vector3(0,-.155,0)),ankle=leg.lower.localToWorld(new THREE.Vector3(0,-.17,0));
+    const knee=leg.upper.localToWorld(new THREE.Vector3(0,-ROBOT_PROPORTIONS.thigh,0)),ankle=leg.lower.localToWorld(new THREE.Vector3(0,-ROBOT_PROPORTIONS.shin,0));
     assert(knee.distanceTo(leg.knee.getWorldPosition(new THREE.Vector3()))<1e-8);assert(ankle.distanceTo(leg.foot.getWorldPosition(new THREE.Vector3()))<1e-8);
     assert(leg.foot.getWorldPosition(new THREE.Vector3()).y>=u.y+.032-1e-8,`${kind} ${combo} ${i}: 足が地面を突き抜ける`);
    }

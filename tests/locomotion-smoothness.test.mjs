@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../vendor/three.module.min.js';
 import {Battle} from '../src/sim.js';
-import {ArenaRenderer,createRobot} from '../src/render.js';
+import {ArenaRenderer,createRobot,ROBOT_PROPORTIONS} from '../src/render.js';
 import {defaultConfig} from '../src/customize.js';
 import {CATALOG,PARTS} from '../src/data.js';
 
@@ -28,10 +28,10 @@ test('速い通常歩行は腰の上下動と膝の急変を抑え、開始・�
    if(i>=fps*.3&&walking){maxima.steadyPelvis=Math.max(maxima.steadyPelvis,pelvis);maxima.steadyKnee=Math.max(maxima.steadyKnee,knee);}
    assert(next.contacts.some(f=>f.planted),`${label}: each frame keeps a supporting foot`);
    for(const [j,leg]of ref.feet.entries()){
-    assert(leg.upper.localToWorld(new THREE.Vector3(0,-.155,0)).distanceTo(world(leg.knee))<1e-8,`${label}: thigh remains connected`);
-    assert(leg.lower.localToWorld(new THREE.Vector3(0,-.17,0)).distanceTo(next.contacts[j].ankle)<1e-8,`${label}: shin remains connected`);
+    assert(leg.upper.localToWorld(new THREE.Vector3(0,-ROBOT_PROPORTIONS.thigh,0)).distanceTo(world(leg.knee))<1e-8,`${label}: thigh remains connected`);
+    assert(leg.lower.localToWorld(new THREE.Vector3(0,-ROBOT_PROPORTIONS.shin,0)).distanceTo(next.contacts[j].ankle)<1e-8,`${label}: shin remains connected`);
     const contact=next.contacts[j],old=previous.contacts[j];
-    if(contact.planted){const target=new THREE.Vector3(...ref.locomotion.feet[j].world);assert(target.distanceTo(world(leg))<=.324+1e-8,`${label}: planted ankle is physically reachable`);assert(contact.ankle.distanceTo(target)<1e-7,`${label}: pelvis smoothing preserves the actual fixed contact`);}
+    if(contact.planted){const target=new THREE.Vector3(...ref.locomotion.feet[j].world);assert(target.distanceTo(world(leg))<=ROBOT_PROPORTIONS.thigh+ROBOT_PROPORTIONS.shin-.001+1e-8,`${label}: planted ankle is physically reachable`);assert(contact.ankle.distanceTo(target)<1e-7,`${label}: pelvis smoothing preserves the actual fixed contact`);}
     if(contact.planted&&old.planted&&contact.id===old.id)assert(contact.ankle.distanceTo(old.ankle)<1e-7,`${label}: planted foot does not slide`);
    }
    previous=next;

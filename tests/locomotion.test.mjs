@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../vendor/three.module.min.js';
 import {Battle,lockRange} from '../src/sim.js';
-import {ArenaRenderer,createRobot} from '../src/render.js';
+import {ArenaRenderer,createRobot,ROBOT_PROPORTIONS} from '../src/render.js';
 import {defaultConfig} from '../src/customize.js';
 import {CATALOG,FRAMES,PARTS,WEAPONS} from '../src/data.js';
 import {sampleLocomotion} from '../src/locomotion.js';
@@ -22,7 +22,7 @@ function draw({b,u,ref},groundAt=b.groundAt.bind(b)){
  ArenaRenderer.prototype.animateRobot.call({groundAt},ref,u,b.time);ref.root.updateMatrixWorld(true);
 }
 function jointsConnected(ref){
- for(const leg of ref.feet)if(leg.knee){assert(leg.upper.localToWorld(new THREE.Vector3(0,-.155,0)).distanceTo(world(leg.knee))<1e-8,'thigh connects to knee');assert(leg.lower.localToWorld(new THREE.Vector3(0,-.17,0)).distanceTo(world(leg.foot))<1e-8,'shin connects to ankle');}
+ for(const leg of ref.feet)if(leg.knee){assert(leg.upper.localToWorld(new THREE.Vector3(0,-ROBOT_PROPORTIONS.thigh,0)).distanceTo(world(leg.knee))<1e-8,'thigh connects to knee');assert(leg.lower.localToWorld(new THREE.Vector3(0,-ROBOT_PROPORTIONS.shin,0)).distanceTo(world(leg.foot))<1e-8,'shin connects to ankle');}
  for(const arm of ref.arms){assert(arm.upper.localToWorld(new THREE.Vector3(0,-.195,0)).distanceTo(world(arm.elbow))<1e-8,'upper arm connects to elbow');assert(arm.lower.localToWorld(new THREE.Vector3(0,-.195,0)).distanceTo(world(arm.hand))<1e-8,'lower arm connects to hand');}
  for(const weapon of ref.weaponAttachments.filter(o=>o.name!=='shield'))assert(world(weapon).distanceTo(world(weapon.parent))<1e-8,'weapon remains in its hand');
  const supported=ref.weaponAttachments[0].userData.supportGrip;if(supported)assert(ref.weaponAttachments[0].localToWorld(new THREE.Vector3(...supported)).distanceTo(world(ref.arms[1].hand))<.005,'supporting hand remains on two-handed grip');
@@ -127,7 +127,7 @@ test('射程を超えたロック維持・ターゲット切替の約180度旋�
    const contacts=contactSnapshot(ref),label=`${frame} ${fps}fps ${scenario}${reverseAt===undefined?'':` at ${reverseAt}s`} frame ${i}`;assert(contacts.some(c=>c.planted),`${label}: support stays on the ground`);fixedContacts(previous,contacts,label);previous=contacts;jointsConnected(ref);
    for(let j=0;j<2;j++){
     const leg=ref.feet[j],bounds=new THREE.Box3().setFromObject(leg.foot);assert(bounds.min.y>=-.002,`${label}: foot enters the floor`);
-    if(contacts[j].planted){const target=new THREE.Vector3(...ref.locomotion.feet[j].world);assert(target.distanceTo(world(leg))<=.324+1e-8,`${label}: fixed ankle target exceeds the physical leg reach`);assert(target.distanceTo(contacts[j].position)<1e-7,`${label}: planted ankle was clamped away from its world target`);}
+    if(contacts[j].planted){const target=new THREE.Vector3(...ref.locomotion.feet[j].world);assert(target.distanceTo(world(leg))<=ROBOT_PROPORTIONS.thigh+ROBOT_PROPORTIONS.shin-.001+1e-8,`${label}: fixed ankle target exceeds the physical leg reach`);assert(target.distanceTo(contacts[j].position)<1e-7,`${label}: planted ankle was clamped away from its world target`);}
    }
    const before=poseSnapshot(ref);draw(f);assert.equal(poseSnapshot(ref),before,`${label}: same-time rerender is stable`);
   }

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../vendor/three.module.min.js';
 import {Battle} from '../src/sim.js';
-import {ArenaRenderer,createRobot} from '../src/render.js';
+import {ArenaRenderer,createRobot,ROBOT_PROPORTIONS} from '../src/render.js';
 import {defaultConfig} from '../src/customize.js';
 import {CATALOG,PARTS} from '../src/data.js';
 import {sampleMotion} from '../src/motion.js';
@@ -24,8 +24,8 @@ function inspector(f){
  const capture=()=>{
   const {u,ref,draw}=f;draw();const attack=u.attack||(u.motion?.weapon==='sword'&&!u.charging?u.motion:null),motion=sampleMotion('sword',attack),approach=attack?.approach,inApproach=approach&&approach.elapsed<approach.duration;
   for(const [i,leg]of ref.feet.entries()){
-   const point=position(leg.foot),bounds=new THREE.Box3().setFromObject(leg.foot);assert(bounds.min.y>=-.002,'a planted or swinging foot cannot enter the floor');assert(point.distanceTo(position(leg))<=.324+1e-8,'the actual ankle remains within the physical leg reach');
-   assert(leg.upper.localToWorld(new THREE.Vector3(0,-.155,0)).distanceTo(position(leg.knee))<1e-8,'thigh remains connected to the knee');assert(leg.lower.localToWorld(new THREE.Vector3(0,-.17,0)).distanceTo(point)<1e-8,'shin remains connected to the ankle');
+   const point=position(leg.foot),bounds=new THREE.Box3().setFromObject(leg.foot);assert(bounds.min.y>=-.002,'a planted or swinging foot cannot enter the floor');assert(point.distanceTo(position(leg))<=ROBOT_PROPORTIONS.thigh+ROBOT_PROPORTIONS.shin-.001+1e-8,'the actual ankle remains within the physical leg reach');
+   assert(leg.upper.localToWorld(new THREE.Vector3(0,-ROBOT_PROPORTIONS.thigh,0)).distanceTo(position(leg.knee))<1e-8,'thigh remains connected to the knee');assert(leg.lower.localToWorld(new THREE.Vector3(0,-ROBOT_PROPORTIONS.shin,0)).distanceTo(point)<1e-8,'shin remains connected to the ankle');
    const supported=attack&&motion.feet[i][1]<=.035+1e-9&&!inApproach;
    if(supported){if(anchors[i]?.attack===attack){const drift=point.distanceTo(anchors[i].point);maxDrift=Math.max(maxDrift,drift);checked++;assert(drift<1e-7,`combo ${attack.combo} phase ${(attack.elapsed/attack.duration).toFixed(4)} foot ${i}: grounded anchor slides ${drift}`);}else anchors[i]={attack,point:point.clone()};}else{anchors[i]=null;if(inApproach)excluded++;}
   }

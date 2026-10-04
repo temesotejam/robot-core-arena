@@ -11,7 +11,7 @@ async function landingReview(browser,errors,view,withShield){
  const page=await browser.newPage({viewport:{width:1100,height:800},recordVideo:{dir:output,size:{width:1100,height:800}}});page.on('pageerror',error=>errors.push(error.message));
  await page.goto('http://127.0.0.1:4173');await page.locator('.home-copy').waitFor();
  await page.evaluate(async({view,withShield})=>{
-  const [{app},{defaultConfig},THREE]=await Promise.all([import('/src/main.js'),import('/src/customize.js'),import('/vendor/three.module.min.js')]);
+  const [{app},{defaultConfig},THREE,{ROBOT_PROPORTIONS}]=await Promise.all([import('/src/main.js'),import('/src/customize.js'),import('/vendor/three.module.min.js'),import('/src/render.js')]);
   const config=defaultConfig();config.passives=[];config.abilities=[];config.sets=[0,1].map(()=>({item:'weapon:sword',shield:withShield?'shield:basic':null}));app.state.units[0]=config;app.state.enemies[0]=defaultConfig(0,true);app.state.enemies[0].abilities=[];
   Object.assign(app.state.setup,{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true});app.startBattle();const b=app.battle;b.countdown=0;b.paused=true;b.training.freezeAI=true;b.rng=()=>.99;
   const u=b.human,v=b.entities[1];Object.assign(u,{x:3,z:0,yaw:0,target:null});Object.assign(v,{x:3,z:8});
@@ -26,7 +26,7 @@ async function landingReview(browser,errors,view,withShield){
    if(!wasGrounded&&u.grounded)data.touchdown=b.time;
    const landing=ref.landing,elapsed=landing?.start===null?null:b.time-landing.start,feet=ref.feet.map((leg,i)=>{
     const point=position(leg.foot),bounds=new THREE.Box3().setFromObject(leg.foot);assertion(bounds.min.y>=-.002,'landing foot enters ground');
-    assertion(leg.upper.localToWorld(new THREE.Vector3(0,-.155,0)).distanceTo(position(leg.knee))<1e-7,'landing knee disconnects');assertion(leg.lower.localToWorld(new THREE.Vector3(0,-.17,0)).distanceTo(point)<1e-7,'landing ankle disconnects');
+    assertion(leg.upper.localToWorld(new THREE.Vector3(0,-ROBOT_PROPORTIONS.thigh,0)).distanceTo(position(leg.knee))<1e-7,'landing knee disconnects');assertion(leg.lower.localToWorld(new THREE.Vector3(0,-ROBOT_PROPORTIONS.shin,0)).distanceTo(point)<1e-7,'landing ankle disconnects');
     if(u.grounded&&data.touchdown!==null){if(anchors[i])maxDrift=Math.max(maxDrift,point.distanceTo(anchors[i]));else anchors[i]=point.clone();}
     return {position:point.toArray(),screen:app.renderer.project(point.x,point.y,point.z)};
    });

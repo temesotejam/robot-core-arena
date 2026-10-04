@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../vendor/three.module.min.js';
 import {Battle} from '../src/sim.js';
-import {ArenaRenderer,createRobot} from '../src/render.js';
+import {ArenaRenderer,createRobot,ROBOT_PROPORTIONS} from '../src/render.js';
 import {defaultConfig} from '../src/customize.js';
 import {CATALOG,PARTS} from '../src/data.js';
 
@@ -50,7 +50,7 @@ test('全フレームの着地回復で足・履帯の支持位置、骨の長�
    assert(ref.root.position.distanceTo(new THREE.Vector3(u.x,u.y,u.z))<1e-10,'landing never moves the simulation root');
    for(const [side,leg]of ref.feet.entries()){
     const ankle=position(leg.foot||leg);assert(ankle.distanceTo(feet[side])<1e-8,'compressing the pelvis cannot lift or slide a ground contact');assert(new THREE.Box3().setFromObject(leg.foot||leg).min.y>=0,'landing foot or track cannot enter the floor');
-    if(leg.knee){assert(leg.upper.localToWorld(new THREE.Vector3(0,-.155,0)).distanceTo(position(leg.knee))<1e-8,'thigh remains connected');assert(leg.lower.localToWorld(new THREE.Vector3(0,-.17,0)).distanceTo(ankle)<1e-8,'shin remains connected');}
+    if(leg.knee){assert(leg.upper.localToWorld(new THREE.Vector3(0,-ROBOT_PROPORTIONS.thigh,0)).distanceTo(position(leg.knee))<1e-8,'thigh remains connected');assert(leg.lower.localToWorld(new THREE.Vector3(0,-ROBOT_PROPORTIONS.shin,0)).distanceTo(ankle)<1e-8,'shin remains connected');}
    }
    for(const arm of ref.arms){assert(arm.upper.localToWorld(new THREE.Vector3(0,-.195,0)).distanceTo(position(arm.elbow))<1e-8,'upper arm remains connected');assert(arm.lower.localToWorld(new THREE.Vector3(0,-.195,0)).distanceTo(position(arm.hand))<1e-8,'forearm remains connected');}
    if(frame==='panzer')assert(ref.legGroup.position.distanceTo(tracks)<1e-10,'upper-body receiving pose cannot bounce the tracks');

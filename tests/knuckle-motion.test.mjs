@@ -106,7 +106,7 @@ test('満溜めは右の上昇打撃で単発ジャブと区別でき、実必�
 
 test('表示する腰装甲は実際の骨盤回転を追い、胸より先に荷重を回す',()=>{
  for(const frame of frames)for(let combo=0;combo<6;combo++){
-  const {u,ref}=fixture(frame),plates=[];ref.root.traverse(o=>{if(o.name==='pelvisArmour')plates.push(o);});assert.equal(plates.length,2);const rest=plates.map(o=>o.quaternion.clone()),sign=combo%2?-1:1,hip=[],chest=[];
+  const {u,ref}=fixture(frame),plates=[];ref.root.traverse(o=>{if(o.name==='pelvisArmour')plates.push(o);});assert.equal(plates.length,3);const rest=plates.map(o=>o.quaternion.clone()),sign=combo%2?-1:1,hip=[],chest=[];
   for(let n=0;n<=360;n++){
    const p=n/360;attack(u,combo,p);draw(ref,u,p);
    for(let i=0;i<plates.length;i++){

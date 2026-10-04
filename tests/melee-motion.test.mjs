@@ -4,7 +4,7 @@ import * as THREE from '../vendor/three.module.min.js';
 import {Battle} from '../src/sim.js';
 import {sampleMotion,motionRhythm,stepPhase} from '../src/motion.js';
 import {swordArm,swordMotion,swordChargeHold} from '../src/sword-motion.js';
-import {createRobot,ArenaRenderer} from '../src/render.js';
+import {createRobot,ArenaRenderer,ROBOT_PROPORTIONS} from '../src/render.js';
 import {defaultConfig,cost} from '../src/customize.js';
 import {CATALOG,PARTS,WEAPONS} from '../src/data.js';
 
@@ -152,8 +152,8 @@ test('各段の支持足は前進・骨盤回転・追尾中も接地位置を�
     if(f.feet[j][1]>.035+1e-9)anchors[j]=null;
     else {contacts++;anchors[j]??=points[j].clone();assert(points[j].distanceTo(anchors[j])<1e-7,`${kind}/${frame}/${combo}/${p}/${j}: 支持足が滑る`);}
     const leg=ref.feet[j],knee=leg.knee.getWorldPosition(new THREE.Vector3());
-    assert(leg.upper.localToWorld(new THREE.Vector3(0,-.155,0)).distanceTo(knee)<1e-8);
-    assert(leg.lower.localToWorld(new THREE.Vector3(0,-.17,0)).distanceTo(points[j])<1e-8);
+    assert(leg.upper.localToWorld(new THREE.Vector3(0,-ROBOT_PROPORTIONS.thigh,0)).distanceTo(knee)<1e-8);
+    assert(leg.lower.localToWorld(new THREE.Vector3(0,-ROBOT_PROPORTIONS.shin,0)).distanceTo(points[j])<1e-8);
     assert(new THREE.Box3().setFromObject(leg.foot).min.y>=0,`${kind}/${frame}/${combo}/${p}: 足が床を貫通`);
    }
    assert(contacts>=1,`${kind}/${frame}/${combo}/${p}: 両足とも支持しない`);

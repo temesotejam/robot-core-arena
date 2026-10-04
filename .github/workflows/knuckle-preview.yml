@@ -3,6 +3,8 @@ on:
   push:
     paths:
       - scripts/knuckle-preview.cjs
+      - scripts/proportion-preview.cjs
+      - src/render.js
       - .github/workflows/knuckle-preview.yml
   workflow_dispatch:
 permissions:
@@ -13,12 +15,15 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: npm install --no-save --package-lock=false playwright@1.63.0
       - run: npx playwright install --with-deps chromium
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: node scripts/proportion-preview.cjs
       - run: node scripts/knuckle-preview.cjs
       - uses: actions/upload-artifact@v4
         if: always()
