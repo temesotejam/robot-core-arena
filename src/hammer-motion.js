@@ -1,9 +1,11 @@
 import * as THREE from '../vendor/three.module.min.js';
 import {meleePose,blendMelee} from './melee-pose.js';
 
-// Original two-handed hammer choreography. W 21 (18:41–18:47.5) and 38
-// (13:11–13:19) show large blades/shafts, not this hammer's full ground combo.
-// Their shoulder-out carry, torso turn and separate recovery inform the pose.
+// Original heavy, two-handed cuts, following the user's greatsword direction.
+// W 21/38 are related large-blade references, not a measured hammer combo.
+// Author the grip and the whole rigid shaft in facing space, then solve both
+// connected arms in the rotating chest. The head traces a diagonal, not a
+// horizontal stick twirled at the wrists.
 const clamp=x=>Math.max(0,Math.min(1,x));
 const smooth=x=>{x=clamp(x);return x*x*(3-2*x);};
 const ramp=(p,a,b)=>smooth((p-a)/(b-a));
@@ -25,60 +27,75 @@ function curve(keys,p){
   return from.map((v,c)=>(2*t**3-3*t*t+1)*v+(t**3-2*t*t+t)*h*slope(i,c)+(-2*t**3+3*t*t)*to[c]+(t**3-t*t)*h*slope(i+1,c));
  }
 }
-function landmark(hand,pitch,azimuth,sourceBody,body,hipYaw,drop,shift,weight,footYaw=[-.13,.20]){
- const position=new THREE.Vector3(...hand).sub(new THREE.Vector3(0,.36,0)).applyEuler(new THREE.Euler(...sourceBody)).add(new THREE.Vector3(0,.36,0));
- return {hand:position.toArray(),angles:[pitch+sourceBody[0],azimuth+sourceBody[1],sourceBody[2]],body,hipYaw,drop,shift,weight,footYaw};
+function at(hand,pitch,azimuth,body,hipYaw,drop,shift,weight,footYaw=[-.13,.20]){
+ return {hand,axis:[Math.sin(pitch)*Math.sin(azimuth),Math.cos(pitch),Math.sin(pitch)*Math.cos(azimuth)],body,hipYaw,drop,shift,weight,footYaw};
 }
-const carry=landmark([.018,.48,.095],1.26,-1.12,[.065,-.40,.035],[.065,-.40,.035],-.24,-.065,[-.018,-.020],0);
+// The head rests above and behind the right shoulder. The hands stay in front
+// of the chest, with elbows bent and a split stance, ready to carry the weight.
+const carry=at([-.010,.630,.230],-1.03,1.00,[.035,-.40,.025],-.23,-.058,[.005,-.014],0);
 function pose(f){
  const inverse=quaternion(f.body).invert(),position=new THREE.Vector3(...f.hand).sub(new THREE.Vector3(0,.36,0)).applyQuaternion(inverse).add(new THREE.Vector3(0,.36,0)),
-  shaft=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),f.angles[1])
-   .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),f.angles[0]))
-   .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),f.angles[2])),
-  e=new THREE.Euler().setFromQuaternion(inverse.multiply(shaft));
+  // A single swing rotation follows the shaft direction. Interpolating a yaw
+  // around an upright shaft would spin the massive head at the recovery apex.
+  shaft=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(...f.axis).normalize()),
+  localShaft=inverse.multiply(shaft),e=new THREE.Euler().setFromQuaternion(localShaft),support=new THREE.Vector3(0,.09,0).applyQuaternion(localShaft),
+  centres=[new THREE.Vector3(-.24,.66,0),new THREE.Vector3(.24,.66,0).sub(support)];
+ // Project the *whole grip frame* into the two arms' common reach. This keeps
+ // one rigid shaft and fixed bone lengths, including the opposite-side load.
+ // The shared one-hand IK alone would clamp a supporting wrist off the haft.
+ for(let n=0;n<12;n++)for(const centre of centres){const offset=position.clone().sub(centre);if(offset.length()>.386)position.copy(centre).add(offset.setLength(.386));}
  return {...meleePose({right:{position:position.toArray(),rotation:[e.x,e.y,e.z]},twoHand:true,
   body:f.body,head:[-f.body[0]*.85,-f.body[1]*.94,-f.body[2]*.7],hipYaw:f.hipYaw,drop:f.drop,shift:f.shift,weight:f.weight,
-  feet:baseFeet.map(v=>[...v]),footYaw:f.footYaw,poles:[[-.74,-.40,-.28],[.66,-.32,-.22]]}),tailClearance:true};
+  feet:baseFeet.map(v=>[...v]),footYaw:f.footYaw,poles:[[-.74,-.65,-.80],[.74,-.65,-.80]]}),tailClearance:true};
 }
 const ready=pose(carry);
-const at=(hand,pitch,azimuth,oldBody,body,hip,drop,shift,weight,yaw)=>landmark(hand,pitch,azimuth,oldBody,body,hip,drop,shift,weight,yaw);
+// Right shoulder -> front target -> left hip. The hips open while the heavy
+// head is still loaded; the hands descend as the shoulder turn accelerates.
 const sweepKeys=[
  [0,carry],
- [.12,at([.025,.58,.135],1.24,-.54,[-.04,-.22,.02],[-.035,-.42,.04],-.46,-.078,[.020,-.028],.45)],
- [.23,at([.030,.585,.150],1.42,-.57,[-.065,-.40,.025],[-.055,-.66,.045],-.58,-.097,[.025,-.029],.78)],
- [.28,at([.025,.590,.155],1.48,-.57,[-.060,-.43,.025],[-.045,-.66,.042],-.17,-.100,[.025,-.011],.93)],
- [.335,at([.005,.590,.178],1.50,-.40,[.020,-.25,.012],[.028,-.42,.020],.28,-.093,[.010,.018],1)],
- [.395,at([-.020,.585,.180],1.53,.03,[.085,.08,-.016],[.10,.08,-.035],.52,-.089,[-.010,.045],1)],
- [.48,at([-.042,.565,.170],1.62,.43,[.13,.49,-.035],[.155,.66,-.055],.58,-.079,[-.025,.059],1,[.18,.27])],
- [.61,at([-.044,.565,.138],1.57,.23,[.11,.61,-.03],[.13,.77,-.050],.46,-.071,[-.018,.043],.68,[.21,.25])],
- [.74,at([-.023,.610,.145],.80,-.40,[.06,.39,-.018],[.085,.45,-.030],.23,-.061,[-.007,.019],.35)],
- [.94,carry],[1,carry],
+ [.12,at([-.010,.665,.230],-.90,1.05,[-.015,-.51,.035],-.46,-.072,[.016,-.026],.42)],
+ [.23,at([-.010,.700,.210],-.62,1.08,[-.045,-.66,.045],-.58,-.089,[.022,-.030],.78)],
+ [.28,at([-.025,.695,.210],-.40,1.15,[-.040,-.66,.043],-.16,-.093,[.022,-.010],.93)],
+ [.335,at([-.025,.630,.245],1.24,-.15,[.060,-.42,.020],.29,-.086,[.006,.028],1)],
+ [.395,at([-.005,.605,.265],1.60,.20,[.125,.09,-.030],.53,-.090,[-.009,.049],1)],
+ [.48,at([.012,.670,.200],1.80,.85,[.170,.68,-.050],.60,-.080,[-.019,.062],1,[.17,.27])],
+ [.59,at([.010,.680,.190],1.82,1.04,[.155,.79,-.046],.47,-.074,[-.014,.047],.74,[.20,.25])],
+ [.80,at([-.005,.650,.190],.72,1.25,[.080,.44,-.020],.24,-.061,[-.004,.021],.34)],
+ [.89,at([-.010,.665,.230],-.25,1.10,[.035,-.08,.008],-.04,-.058,[.003,-.003],.10)],
+ [.98,carry],[1,carry],
 ];
+// The first cut's follow-through gathers up the left side for a diagonal
+// return, rather than standing up and repeating a centred overhead chop.
 const slamKeys=[
  [0,carry],
- [.10,at([.015,.710,.210],.10,-.08,[-.025,-.08,.010],[-.028,-.32,.025],-.31,-.073,[.009,-.028],.35)],
- [.225,at([.018,.858,.185],-.67,-.08,[-.040,-.06,.010],[-.065,-.40,.026],-.30,-.096,[.010,-.033],.78)],
- [.28,at([.018,.858,.185],-.73,-.08,[-.040,-.04,.008],[-.063,-.37,.024],.04,-.098,[.010,-.010],.94)],
- [.34,at([-.023,.760,.130],.38,-.06,[.015,-.02,.004],[.02,-.21,.010],.28,-.103,[.005,.028],1)],
- [.405,at([-.022,.670,.155],1.32,-.04,[.14,.01,-.004],[.16,.06,-.024],.34,-.108,[-.008,.058],1)],
- [.48,at([-.023,.718,.155],2.10,-.04,[.21,.015,-.004],[.235,.13,-.030],.29,-.101,[-.014,.067],1,[.07,.25])],
- [.59,at([-.023,.722,.135],2.13,-.04,[.19,.012,-.003],[.205,.10,-.024],.19,-.096,[-.009,.048],.72,[.07,.25])],
- [.72,at([-.025,.650,.128],1.62,-.06,[.11,.01,0],[.13,-.01,-.009],.05,-.071,[-.003,.018],.38)],
- [.92,carry],[1,carry],
+ [.11,at([-.010,.730,.235],.02,.95,[-.020,.25,-.025],.32,-.075,[-.012,-.022],.38)],
+ [.225,at([.025,.770,.180],.50,1.28,[-.070,.61,-.045],.48,-.098,[-.020,-.030],.82)],
+ [.29,at([.025,.765,.195],.57,1.18,[-.065,.58,-.040],-.08,-.102,[-.018,-.007],.95)],
+ [.35,at([.012,.710,.250],1.15,.24,[.045,.34,-.015],-.32,-.105,[-.007,.031],1)],
+ [.405,at([-.008,.665,.265],1.48,-.03,[.145,-.09,.023],-.47,-.110,[.010,.059],1)],
+ [.48,at([-.018,.710,.185],1.90,-.86,[.245,-.65,.048],-.54,-.102,[.016,.067],1,[-.25,.06])],
+ [.60,at([-.020,.710,.155],1.90,-1.04,[.205,-.69,.042],-.38,-.094,[.010,.046],.72,[-.23,.06])],
+ [.75,at([-.035,.690,.155],1.00,-1.45,[.110,-.54,.030],-.28,-.070,[.006,.019],.34)],
+ [.86,at([-.010,.675,.225],-.65,1.12,[.045,-.44,.026],-.24,-.060,[.005,-.001],.10)],
+ [.95,carry],[1,carry],
 ];
+// A longer shoulder load and one deep descending cut. Do not twirl or reset
+// the already-loaded weapon when the held attack is released.
 const chargedKeys=[
  [0,carry],
- [.10,at([.015,.720,.210],.10,-.10,[-.027,-.12,.01],[-.04,-.38,.032],-.39,-.083,[.012,-.032],.43)],
- [.225,at([.018,.858,.185],-.76,.72,[-.045,-.12,.012],[-.079,-.47,.033],-.36,-.109,[.014,-.037],.86)],
- [.28,at([.018,.858,.185],-.79,.72,[-.045,-.10,.012],[-.075,-.44,.032],.06,-.112,[.012,-.014],1)],
- [.36,at([-.020,.746,.137],.84,-.07,[.065,-.05,.003],[.083,-.19,.008],.35,-.115,[.005,.037],1)],
- [.48,at([-.020,.758,.138],2.22,-.05,[.215,.02,-.006],[.245,.16,-.036],.35,-.108,[-.016,.071],1,[.09,.28])],
- [.59,at([-.021,.762,.117],2.23,-.05,[.19,.017,-.005],[.225,.13,-.027],.24,-.101,[-.009,.048],.75,[.09,.28])],
- [.78,at([-.023,.693,.110],1.38,-.07,[.09,.007,0],[.125,-.04,-.010],.06,-.072,[-.005,.014],.36)],
- [.94,carry],[1,carry],
+ [.10,at([-.010,.690,.235],-.85,1.04,[-.020,-.52,.040],-.46,-.080,[.016,-.029],.43)],
+ [.225,at([-.015,.765,.210],-.60,1.08,[-.080,-.65,.052],-.47,-.110,[.020,-.036],.86)],
+ [.28,at([-.015,.760,.220],-.53,1.05,[-.075,-.62,.050],.07,-.114,[.017,-.013],1)],
+ [.36,at([-.025,.720,.260],.98,-.28,[.065,-.31,.023],.35,-.117,[.004,.038],1)],
+ [.395,at([-.010,.690,.270],1.39,-.10,[.155,-.05,-.011],.49,-.119,[-.008,.058],1)],
+ [.48,at([.005,.740,.200],1.92,.50,[.275,.56,-.048],.52,-.109,[-.018,.073],1,[.12,.28])],
+ [.60,at([.005,.740,.160],1.96,.75,[.235,.65,-.039],.36,-.102,[-.011,.048],.74,[.12,.28])],
+ [.77,at([-.005,.680,.210],1.10,1.10,[.110,.31,-.015],.12,-.073,[-.005,.017],.33)],
+ [.89,at([-.010,.675,.230],-.25,1.10,[.040,-.16,.009],-.09,-.059,[.003,-.005],.08)],
+ [.96,carry],[1,carry],
 ];
 function makeClip(name,stage,keys,contact,footwork={land:.29,rearLand:.65,gatherEnd:.94,lift:.070}){
- const channels=['hand','angles','body','shift','footYaw'],values=Object.fromEntries(channels.map(c=>[c,keys.map(([t,f])=>[t,f[c]])])),
+ const channels=['hand','axis','body','shift','footYaw'],values=Object.fromEntries(channels.map(c=>[c,keys.map(([t,f])=>[t,f[c]])])),
   scalar=['hipYaw','drop','weight'];for(const c of scalar)values[c]=keys.map(([t,f])=>[t,[f[c]]]);
  const sample=p=>{
   if(p<=0||p>=1)return ready;
@@ -95,8 +112,7 @@ function sampleClip(clip,p,start){
  const out=clip.sample(p);return p<.12?blendMelee(start,out,ramp(p,0,.12)):out;
 }
 function chargeHold(charging){
- // Lift forward of the helmet before taking the head back. Directly blending
- // carry and overhead load sweeps the shaft through Panzer's wider helmet.
+ // Follow the shoulder-side load, including its clearance around the helmet.
  const amount=smooth(clamp(charging.amount??(charging.elapsed||0))),loaded=charged.sample(charged.load*amount);
  return blendMelee(charging.from||ready,loaded,ramp(charging.elapsed||0,0,.10));
 }

@@ -38,10 +38,10 @@ let browser;
      r.effects.visible=false;r.scene.fog=null;r.camera.fov=35;r.camera.updateProjectionMatrix();
      for(const light of r.scene.children)if(light.isDirectionalLight&&light.castShadow){Object.assign(light.shadow.camera,{left:-2,right:2,top:2,bottom:-2});light.shadow.camera.updateProjectionMatrix();}
      document.querySelectorAll('body > div').forEach(o=>o.style.display='none');r.animateRobot(ref,u,0,(x,z)=>0);ref.root.updateMatrixWorld(true);ref.ring.visible=false;for(const t of ref.weaponTrails)t.mesh.visible=false;
-     const w=ref.weaponAttachments[0],head=w.localToWorld(new THREE.Vector3(0,.49,0)),grip=w.getWorldPosition(new THREE.Vector3()),support=w.localToWorld(new THREE.Vector3(...w.userData.supportGrip));
+     const w=ref.weaponAttachments[0],head=w.localToWorld(new THREE.Vector3(...(w.userData.strikeCenter||[0,.49,0]))),grip=w.getWorldPosition(new THREE.Vector3()),support=w.localToWorld(new THREE.Vector3(...w.userData.supportGrip));
      const values={head:head.toArray(),grip:grip.toArray(),supportError:support.distanceTo(ref.arms[1].hand.getWorldPosition(new THREE.Vector3())),minLegGeometry:new THREE.Box3().setFromObject(ref.legGroup,true).min.y};
      window.readyImage=view=>{
-      const cameras={front:[0,1.05,2.60],side:[2.60,1.05,0],threequarter:[1.9,1.10,2.0]};r.camera.position.set(...cameras[view]);r.camera.lookAt(0,.53,0);r.camera.updateMatrixWorld(true);
+      const side=kind==='hammer'?-1:1,cameras={front:[0,1.05,2.60],side:[side*2.60,1.05,0],threequarter:[side*1.9,1.10,2.0]};r.camera.position.set(...cameras[view]);r.camera.lookAt(0,.53,0);r.camera.updateMatrixWorld(true);
       const box=new THREE.Box3();ref.root.traverse(o=>{if(o.isMesh&&o.visible&&o!==ref.ring&&!ref.weaponTrails.some(t=>t.mesh===o))box.expandByObject(o);});
       let clipped=false;for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]){const p=new THREE.Vector3(x,y,z).project(r.camera);if(Math.abs(p.x)>.97||Math.abs(p.y)>.97)clipped=true;}
       r.renderer.render(r.scene,r.camera);return {pixels:r.canvas.toDataURL('image/png').split(',')[1],clipped,glError:r.renderer.getContext().getError(),contextLost:!!r.contextLost};

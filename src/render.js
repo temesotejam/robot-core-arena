@@ -51,7 +51,27 @@ function weaponModel(kind,team){const group=new THREE.Group(),w=WEAPONS[kind],me
  if(kind==='sword')group.rotation.y=-Math.PI/2;
  // Model origin is the centre of the grip, shared with the hand socket.
  if(!w.ranged){if(kind!=='knuckle')group.add(box(.035,.16,.04,dark));if(kind==='knuckle'){group.add(plate([[-.058,.026],[-.040,.041],[.040,.041],[.058,.026],[.051,-.034],[-.051,-.034]],.125,dark,0,0,.0675,.006),glow(.084,.012,.080,accent,0,.047,.0675));}
-  else if(kind==='hammer'){group.add(box(.035,.5,.04,'#607482',0,.23,0),armor(.32,.15,.18,metal,0,.49,0),glow(.28,.02,.19,accent,0,.51,0));}
+  else if(kind==='hammer'){
+   // A long reinforced haft and a broad mechanical head. The two thick end
+   // plates are the striking faces; inset panels keep the silhouette readable.
+   group.add(box(.046,.64,.050,'#607482',0,.28,0),armor(.46,.23,.28,metal,0,.60,0),
+    armor(.075,.275,.32,metal,-.245,.60,0),armor(.075,.275,.32,metal,.245,.60,0),
+    armor(.062,.11,.075,dark,0,.46,0),armor(.064,.036,.073,dark,0,.23,0),
+    armor(.064,.036,.073,dark,0,.34,0));
+   for(const z of [-.148,.148]){
+    group.add(armor(.29,.145,.026,dark,0,.60,z),
+     plate([[-.092,-.034],[-.054,-.034],[.016,.034],[-.022,.034]],.009,accent,0,.60,z*1.12,.002),
+     plate([[-.023,-.034],[.015,-.034],[.085,.034],[.047,.034]],.009,accent,0,.60,z*1.12,.002));
+    for(const x of [-.183,.183])for(const y of [.538,.662]){const bolt=cylinder(.011,.012,dark,x,y,z*1.10,6);bolt.rotation.x=Math.PI/2;group.add(bolt);}
+   }
+   for(const x of [-.287,.287]){
+    group.add(armor(.018,.195,.245,'#607482',x,.60,0));
+    for(const y of [.560,.640])group.add(box(.020,.014,.24,dark,x,y,0));
+    for(const y of [.525,.675])for(const z of [-.095,.095]){const bolt=cylinder(.010,.018,dark,x,y,z,6);bolt.rotation.z=Math.PI/2;group.add(bolt);}
+   }
+   group.add(glow(.015,.18,.33,accent,-.207,.60,0),glow(.015,.18,.33,accent,.207,.60,0));
+   group.userData.strikeCenter=[0,.60,0];
+  }
   else if(['lance','naginata','scythe'].includes(kind)){group.add(box(.028,.8,.028,'#607482',0,.3,0));if(kind==='lance'){const tip=new THREE.Mesh(new THREE.ConeGeometry(.055,.2,4),material(metal));tip.position.y=.8;group.add(tip);}else {const points=kind==='scythe'?[[-.025,.68],[.13,.77],[.30,.72],[.34,.55],[.20,.68],[.08,.69]]:[[-.025,.61],[-.02,.79],[.035,.9],[.11,.77],[.06,.65]];group.add(new THREE.Mesh(profile(points,.035),material(metal)),glow(.025,.16,.04,accent,0,.67,.022));}}
   else {const length=kind==='dagger'?.26:kind==='rapier'?.62:.47,width=kind==='rapier'?.026:.07,blade=new THREE.Mesh(profile([[-width/2,.10],[width/2,.10],[width/2,.10+length*.82],[0,.10+length],[-width/2,.10+length*.82]],.024),material(metal));blade.castShadow=true;group.add(blade,glow(.009,length*.75,.027,accent,-width/2+.012,.10+length*.43,0),armor(.14,.025,.07,dark,0,.09,0));}}
  else {const size=kind==='sniper'?.68:['bazooka','missile'].includes(kind)?.55:kind==='pistol'?.22:.39;group.add(armor(.09,.12,size,dark,0,.03,size/2-.06),box(.025,.15,.055,dark,0,-.08,0),glow(.018,.02,size*.65,accent,.05,.07,size*.33));
@@ -66,7 +86,7 @@ function weaponModel(kind,team){const group=new THREE.Group(),w=WEAPONS[kind],me
  }
  if(w.ranged&&!w.shield&&!['dualGun'].includes(kind))group.userData.supportGrip=[.045,.065,.085];
  if(['hammer','naginata','scythe'].includes(kind))group.userData.supportGrip=[0,.09,0];
- if(!w.ranged){group.userData.trailTip=kind==='knuckle'?[0,0,.13]:kind==='dagger'?[0,.36,0]:kind==='hammer'?[0,.49,0]:['lance','naginata','scythe'].includes(kind)?[0,.80,0]:[0,kind==='rapier'?.72:.57,0];group.userData.trailBase=kind==='knuckle'?[0,0,.07]:[0,.10,0];}
+ if(!w.ranged){group.userData.trailTip=kind==='knuckle'?[0,0,.13]:kind==='dagger'?[0,.36,0]:kind==='hammer'?[0,.60,0]:['lance','naginata','scythe'].includes(kind)?[0,.80,0]:[0,kind==='rapier'?.72:.57,0];group.userData.trailBase=kind==='knuckle'?[0,0,.07]:[0,.10,0];}
  return group;
 }
 const ARM_LENGTH=.195,DOWN=new THREE.Vector3(0,-1,0);

@@ -18,13 +18,15 @@ const point=o=>o.getWorldPosition(new THREE.Vector3());
 function draw(ref,u,time=0){ArenaRenderer.prototype.animateRobot.call({},ref,u,time);ref.root.updateMatrixWorld(true);}
 const sample=(combo,p,charge=0)=>sampleMotion('hammer',{combo,charge,elapsed:p,duration:1});
 
-test('ハンマーの通常構えは肩外の斜めの柄、低い腰、前後に開いた足で両手の支持を保つ',()=>{
+test('大型ハンマーは厚い打撃面を持ち、大剣のように肩外へ引いて両手で支える',()=>{
  for(const frame of frames){
   const {ref,u}=fixture(frame);draw(ref,u);
-  const w=ref.weaponAttachments[0],grip=point(w),head=w.localToWorld(new THREE.Vector3(0,.49,0)),axis=head.clone().sub(grip).normalize(),ready=sampleMotion('hammer',null);
+  const w=ref.weaponAttachments[0],grip=point(w),head=w.localToWorld(new THREE.Vector3(...w.userData.strikeCenter)),axis=head.clone().sub(grip).normalize(),ready=sampleMotion('hammer',null);
   assert(Math.abs(head.x)>.28,'ヘッドを正面の中央へ立てる');
-  assert(Math.hypot(axis.x,axis.z)>.80,'柄を竹刀のように縦へ構える');
-  assert(grip.y<.48&&head.y<.70,'握りとヘッドを胸前の高い位置へ残す');
+  assert(Math.hypot(axis.x,axis.z)>.80&&axis.y>.35,'重いヘッドを肩の横へ引かない');
+  assert(head.y>grip.y+.25&&head.z<grip.z-.20,'正面へ竹刀のように構える');
+  const local=new THREE.Box3();for(const mesh of w.children.filter(m=>m.isMesh)){mesh.geometry.computeBoundingBox();local.union(mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrix));}
+  const size=local.getSize(new THREE.Vector3());assert(size.x>.55&&size.y>.78&&size.z>.32,'大型の厚い打撃面を持たない');
   assert(Math.abs(ready.body[1])>.25&&ready.drop<-.045,'胸と腰が直立したまま');
   assert(ready.feet[1][0]-ready.feet[0][0]>.28&&ready.feet[1][2]-ready.feet[0][2]>.18,'足を前後に開かない');
   if(frame!=='panzer'){const feet=ref.feet.map(leg=>point(leg.foot));assert(feet[1].x-feet[0].x>.30&&feet[1].z-feet[0].z>.21,'表示した脚が細い直立構えのまま');}
@@ -34,23 +36,38 @@ test('ハンマーの通常構えは肩外の斜めの柄、低い腰、前後�
  }
 });
 
-test('横振りは腰から胸へ大きく旋回し、叩きつけは頭上の引きから前へ折り込む',()=>{
+test('大剣風の通常2段は腰が先行し、反対の肩から斜めに振り下ろす',()=>{
  const swing=Array.from({length:241},(_,n)=>sample(0,n/240)),slam=Array.from({length:241},(_,n)=>sample(1,n/240));
  const range=(samples,f)=>Math.max(...samples.map(f))-Math.min(...samples.map(f));
  assert(range(swing,f=>f.hipYaw)>1.10&&range(swing,f=>f.body[1])>1.40,'腕だけで横へ振る');
  assert(sample(0,.335).hipYaw>.25&&sample(0,.335).body[1]<-.40,'腰より先に胸を回す');
- assert(sample(1,.225).right.position[1]-sample(0,.225).right.position[1]>.20,'2段目を上へ引き上げない');
  assert(range(slam,f=>f.body[0])>.29&&sample(1,.48).shift[1]>.06,'叩きつけで上体と荷重を運ばない');
+ for(let combo=0;combo<2;combo++){
+  const {ref,u}=fixture(),head=p=>{u.attack={id:'diagonal',weapon:'hammer',combo,elapsed:p,duration:1,origin:[0,0,0],yaw:0};draw(ref,u,p);return ref.weaponAttachments[0].localToWorld(new THREE.Vector3(...ref.weaponAttachments[0].userData.strikeCenter));},load=head(.225),follow=head(.56),side=combo===0?-1:1;
+  assert(load.x*side>.20&&follow.x*side<-.25,'2段とも同じ側で小さく振る');
+  assert(load.y-follow.y>.50,'ヘッドを横一線で回すだけ');
+ }
 });
 
 test('実際のヘッドは命中の経路点を止まらず通過し、回収より速く動く',()=>{
  for(let combo=0;combo<2;combo++){
-  const {ref,u}=fixture(),head=p=>{u.attack={id:'speed',weapon:'hammer',combo,elapsed:p,duration:1,origin:[0,0,0],yaw:0};draw(ref,u,p);return ref.weaponAttachments[0].localToWorld(new THREE.Vector3(0,.49,0));},p=combo?.405:.395,h=.0001,
+  const {ref,u}=fixture(),head=p=>{u.attack={id:'speed',weapon:'hammer',combo,elapsed:p,duration:1,origin:[0,0,0],yaw:0};draw(ref,u,p);return ref.weaponAttachments[0].localToWorld(new THREE.Vector3(...ref.weaponAttachments[0].userData.strikeCenter));},p=combo?.405:.395,h=.0001,
    a=head(p-h),b=head(p),c=head(p+h),incoming=b.clone().sub(a).divideScalar(h),outgoing=c.clone().sub(b).divideScalar(h);
   assert(incoming.length()>1&&outgoing.length()>1,'経路点でヘッドが止まる');
   assert(incoming.distanceTo(outgoing)<.04,'経路点でヘッドの速度が飛ぶ');
   const speed=p=>head(p+h).distanceTo(head(p-h))/(h*2);
-  assert(Math.max(...[.35,.38,.40,.43,.45].map(speed))>Math.max(...[.68,.75,.82,.87].map(speed))*1.1,'回収の方が速い');
+  const passage=Array.from({length:32},(_,n)=>.329+n*(.458-.329)/31),recovery=Array.from({length:81},(_,n)=>.60+n*.40/80);
+  assert(Math.max(...passage.map(speed))>Math.max(...recovery.map(speed))*1.1,'回収の方が速い');
+ }
+});
+
+test('大型ヘッドの端板・装飾まで通常2段と溜めの全経路で床上を保つ',()=>{
+ for(const frame of frames)for(const [combo,charge]of [[0,0],[1,0],[0,1]]){
+  const {ref,u}=fixture(frame);
+  for(let n=0;n<=240;n++){
+   const p=n/240;u.attack={id:'envelope',weapon:'hammer',combo,charge,elapsed:p,duration:1,origin:[0,0,0],yaw:0};draw(ref,u,p);
+   const w=ref.weaponAttachments[0];assert(new THREE.Box3().setFromObject(w,true).min.y>=0,`${frame}/${combo}/${charge}/${p}: 大型ヘッドの外形が床を貫通`);
+  }
  }
 });
 
@@ -77,6 +94,7 @@ test('実入力の2段・近距離と空振りの満溜めで全5フレームの
    b.tick(1/fps,input);b.consumeEvents();draw(ref,u,b.time);
    const bottom=new THREE.Box3().setFromObject(ref.legGroup,true).min.y;
    assert(bottom>=-1e-7,`${frame}/${fps}/${mode}/${u.attack?.combo}/${u.attack&&u.attack.elapsed/u.attack.duration}: 脚の装甲が床へ${-bottom}入る`);
+   assert(new THREE.Box3().setFromObject(ref.weaponAttachments[0],true).min.y>=0,`${frame}/${fps}/${mode}: 大型ハンマーの外形が床を貫通`);
    if(starts===stages&&!u.attack&&!u.motion){ended??=b.time;if(b.time-ended>=.25)break;}
   }
   assert.equal(starts,stages);assert(ended!==null);

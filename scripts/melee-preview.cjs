@@ -88,7 +88,8 @@ let browser;
    const modelBox=()=>{const box=new THREE.Box3();for(const node of nodes)if(node.isMesh&&node.visible&&node!==ref.ring&&!ref.weaponTrails.some(t=>t.mesh===node))box.expandByObject(node);return box;};
    const bounds=new THREE.Box3();for(const frame of data.frames){setFrame(frame);bounds.union(modelBox());}
    const target=bounds.getCenter(new THREE.Vector3()),cameras={};
-   for(const [view,offset]of Object.entries({side:[1,.20,0],threequarter:[.85,.23,1]})){
+   const cameraSide=kind==='hammer'?-1:1;
+   for(const [view,offset]of Object.entries({side:[cameraSide,.20,0],threequarter:[cameraSide*.85,.23,1]})){
     const axis=new THREE.Vector3(...offset).normalize();let distance=2.6;
     for(let attempt=0;attempt<100;attempt++,distance*=1.02){
      r.camera.position.copy(target).addScaledVector(axis,distance);r.camera.lookAt(target);r.camera.updateMatrixWorld(true);
