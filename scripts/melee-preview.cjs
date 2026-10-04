@@ -32,8 +32,8 @@ let browser;
   page.on('console',m=>{if(m.type()==='error')report.errors.push(m.text());});
   await page.goto(`http://127.0.0.1:${port}/`);await page.locator('.home-copy').waitFor();
   const recording=await page.evaluate(async({kind,charged})=>{
-   const [{app},THREE,{defaultConfig},{sampleMotion}]=await Promise.all([import('/src/main.js'),import('/vendor/three.module.min.js'),import('/src/customize.js'),import('/src/motion.js')]);
-   const config=defaultConfig();config.passives=[];config.abilities=[];config.sets=[0,1].map(()=>({item:'weapon:'+kind,shield:'shield:basic',separate:false}));
+   const [{app},THREE,{defaultConfig},{sampleMotion},{WEAPONS}]=await Promise.all([import('/src/main.js'),import('/vendor/three.module.min.js'),import('/src/customize.js'),import('/src/motion.js'),import('/src/data.js')]);
+   const config=defaultConfig();config.passives=[];config.abilities=[];config.sets=[0,1].map(()=>({item:'weapon:'+kind,shield:WEAPONS[kind].shield?'shield:basic':null,separate:false}));
    app.state.units[0]=config;app.state.enemies[0]=defaultConfig(0,true);app.state.enemies[0].passives=[];app.state.enemies[0].abilities=[];
    Object.assign(app.state.setup,{allies:1,enemies:1,stage:'flat',duration:0,player:0,training:true});app.startBattle();
    const b=app.battle,u=b.human,v=b.entities[1],r=app.renderer,ref=r.robots.get(u.id);
@@ -42,7 +42,7 @@ let browser;
    // Stop the application clock before the deterministic diagnostic, so its
    // rAF loop cannot double-advance the Battle or alter a replayed model.
    app.view='inspection';r.mode='inspection';r.quality('high');r.renderer.setPixelRatio(1);r.resize();
-   const data={frames:[],starts:[],hits:[],minFoot:Infinity,minLegGeometry:Infinity,maxFK:0,maxGrip:0,maxPlantedDrift:0,plantedSamples:0};
+   const data={frames:[],starts:[],hits:[],minFoot:Infinity,minLegGeometry:Infinity,maxFK:0,maxGrip:0,maxSupport:0,maxPlantedDrift:0,plantedSamples:0};
    const nodes=[];ref.root.traverse(o=>nodes.push(o));
    const anchors=[null,null],point=o=>o.getWorldPosition(new THREE.Vector3());
    const attack=b.attack.bind(b);b.attack=(unit,charge=0,input={})=>{const ok=attack(unit,charge,input);if(ok&&unit===u)data.starts.push({id:u.attack.id,combo:u.attack.combo,charge,time:b.time});return ok;};
@@ -70,7 +70,8 @@ let browser;
     }
     for(const [i,arm]of ref.arms.entries()){
      data.maxFK=Math.max(data.maxFK,arm.upper.localToWorld(new THREE.Vector3(0,-.195,0)).distanceTo(point(arm.elbow)),arm.lower.localToWorld(new THREE.Vector3(0,-.195,0)).distanceTo(point(arm.hand)));
-     data.maxGrip=Math.max(data.maxGrip,point(ref.weaponAttachments[i]).distanceTo(point(arm.hand)));
+     if(ref.weaponAttachments[i])data.maxGrip=Math.max(data.maxGrip,point(ref.weaponAttachments[i]).distanceTo(point(arm.hand)));
+     else if(i===1&&ref.weaponAttachments[0].userData.supportGrip){const w=ref.weaponAttachments[0],support=w.localToWorld(new THREE.Vector3(...w.userData.supportGrip));data.maxSupport=Math.max(data.maxSupport,support.distanceTo(point(arm.hand)));}
     }
     data.frames.push({time:b.time,combo:current?.combo??null,p:current?current.elapsed/current.duration:null,model:nodes.map(o=>({p:o.position.toArray(),q:o.quaternion.toArray(),s:o.scale.toArray(),visible:o.visible}))});
     if(data.starts.length===stages&&!u.attack&&!u.motion){ended??=b.time;if(b.time-ended>=.5)break;}
@@ -115,7 +116,7 @@ let browser;
   assert.deepEqual(report.starts.map(s=>s.combo),expected);assert(report.starts.every(s=>s.charge===(charged?1:0)));
   assert.deepEqual(report.hits.map(s=>s.combo),expected);assert(report.hits.every(s=>s.damage>0));
   assert.equal(report.infinite,false);assert.equal(report.damage,report.initialTargetLP-report.targetLP);assert(report.tension>=0&&report.tension<100);
-  assert(report.plantedSamples>0&&report.minLegGeometry>=-1e-7&&report.minFoot>=-.00001&&report.maxFK<1e-6&&report.maxGrip<1e-6&&report.maxPlantedDrift<1e-6);
+  assert(report.plantedSamples>0&&report.minLegGeometry>=-1e-7&&report.minFoot>=-.00001&&report.maxFK<1e-6&&report.maxGrip<1e-6&&report.maxSupport<.005&&report.maxPlantedDrift<1e-6);
   for(const view of views){
    const directory=path.join(output,view);fs.mkdirSync(directory,{recursive:true});
    for(let i=0;i<report.frameCount;i++){
