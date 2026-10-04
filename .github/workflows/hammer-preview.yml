@@ -27,7 +27,7 @@ jobs:
       - run: npm install --no-save --package-lock=false playwright@1.63.0
       - run: npx playwright install --with-deps chromium
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: node scripts/melee-ready-preview.cjs --weapon=hammer --before=65d2269f89ee5911b13c2dd233d20223f2c97ff1
+      - run: node scripts/melee-ready-preview.cjs --weapon=hammer --before=b520b147271333806ea96190b38bb9acf759be44
         env:
           MELEE_READY_OUTPUT: /tmp/hammer-preview/ready
       - run: node scripts/melee-motion-browser.cjs --weapons=hammer --matrix-only

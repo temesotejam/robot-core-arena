@@ -18,16 +18,19 @@ const point=o=>o.getWorldPosition(new THREE.Vector3());
 function draw(ref,u,time=0){ArenaRenderer.prototype.animateRobot.call({},ref,u,time);ref.root.updateMatrixWorld(true);}
 const sample=(combo,p,charge=0)=>sampleMotion('hammer',{combo,charge,elapsed:p,duration:1});
 
-test('大型ハンマーは厚い打撃面を持ち、大剣のように肩外へ引いて両手で支える',()=>{
+test('大型ハンマーを腰の横から後ろへ低く構え、肩を前へ出して両手で支える',()=>{
  for(const frame of frames){
   const {ref,u}=fixture(frame);draw(ref,u);
   const w=ref.weaponAttachments[0],grip=point(w),head=w.localToWorld(new THREE.Vector3(...w.userData.strikeCenter)),axis=head.clone().sub(grip).normalize(),ready=sampleMotion('hammer',null);
-  assert(Math.abs(head.x)>.28,'ヘッドを正面の中央へ立てる');
-  assert(Math.hypot(axis.x,axis.z)>.80&&axis.y>.35,'重いヘッドを肩の横へ引かない');
-  assert(head.y>grip.y+.25&&head.z<grip.z-.20,'正面へ竹刀のように構える');
+  assert(head.x<-.24,'ヘッドを体の横の外へ置かない');
+  assert(axis.z<-.80&&axis.y<-.10,'柄を低い後方へ向けない');
+  assert(head.y<grip.y-.075&&head.y>.28&&head.z<grip.z-.45,'肩に担ぐか、正面へ構える');
+  assert(grip.y>.42&&grip.y<.52,'両手の握りを腰の高さへ下げない');
+  const crossbar=w.localToWorld(new THREE.Vector3(.245,.60,0)).sub(w.localToWorld(new THREE.Vector3(-.245,.60,0))).normalize();
+  assert(Math.abs(axis.dot(crossbar))<1e-10&&Math.abs(crossbar.y)>.80,'ヘッドの中央の直角接続や構えの向きを崩す');
   const local=new THREE.Box3();for(const mesh of w.children.filter(m=>m.isMesh)){mesh.geometry.computeBoundingBox();local.union(mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrix));}
   const size=local.getSize(new THREE.Vector3());assert(size.x>.55&&size.y>.78&&size.z>.32,'大型の厚い打撃面を持たない');
-  assert(Math.abs(ready.body[1])>.25&&ready.drop<-.045,'胸と腰が直立したまま');
+  assert(ready.body[0]>.12&&Math.abs(ready.body[1])>.25&&ready.drop<-.045,'肩が前へ出ず、胸と腰が直立したまま');
   assert(ready.feet[1][0]-ready.feet[0][0]>.28&&ready.feet[1][2]-ready.feet[0][2]>.18,'足を前後に開かない');
   if(frame!=='panzer'){const feet=ref.feet.map(leg=>point(leg.foot));assert(feet[1].x-feet[0].x>.30&&feet[1].z-feet[0].z>.21,'表示した脚が細い直立構えのまま');}
   assert(w.localToWorld(new THREE.Vector3(...w.userData.supportGrip)).distanceTo(point(ref.arms[1].hand))<.005,'左手が柄を支えない');
