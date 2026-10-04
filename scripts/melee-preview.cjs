@@ -42,7 +42,7 @@ let browser;
    // Stop the application clock before the deterministic diagnostic, so its
    // rAF loop cannot double-advance the Battle or alter a replayed model.
    app.view='inspection';r.mode='inspection';r.quality('high');r.renderer.setPixelRatio(1);r.resize();
-   const data={frames:[],starts:[],hits:[],minFoot:Infinity,maxFK:0,maxGrip:0,maxPlantedDrift:0,};
+   const data={frames:[],starts:[],hits:[],minFoot:Infinity,maxFK:0,maxGrip:0,maxPlantedDrift:0,plantedSamples:0};
    const nodes=[];ref.root.traverse(o=>nodes.push(o));
    const anchors=[null,null],point=o=>o.getWorldPosition(new THREE.Vector3());
    const attack=b.attack.bind(b);b.attack=(unit,charge=0,input={})=>{const ok=attack(unit,charge,input);if(ok&&unit===u)data.starts.push({id:u.attack.id,combo:u.attack.combo,charge,time:b.time});return ok;};
@@ -61,8 +61,11 @@ let browser;
     const current=u.attack,motion=sampleMotion(kind,current||u.motion,{legFrame:ref.legFrame});
     for(const [i,leg]of ref.feet.entries()){
      data.minFoot=Math.min(data.minFoot,new THREE.Box3().setFromObject(leg.foot).min.y);
-     const position=point(leg.foot),supported=!!current&&(motion.feet[i][1]<=.035+1e-8);
-     if(supported){if(anchors[i]?.id===current.id)data.maxPlantedDrift=Math.max(data.maxPlantedDrift,position.distanceTo(anchors[i].position));else anchors[i]={id:current.id,position};}else anchors[i]=null;
+     // The ordinary renderer releases planting during automatic approach and
+     // charged boost. Its actual contact cache distinguishes that walking
+     // from the authored strike's support, rather than counting a gait as slip.
+     const position=point(leg.foot),supported=!!current&&ref.swordPlant?.id===current.id&&!!ref.swordPlant.feet[i];
+     if(supported){data.plantedSamples++;if(anchors[i]?.id===current.id)data.maxPlantedDrift=Math.max(data.maxPlantedDrift,position.distanceTo(anchors[i].position));else anchors[i]={id:current.id,position};}else anchors[i]=null;
     }
     for(const [i,arm]of ref.arms.entries()){
      data.maxFK=Math.max(data.maxFK,arm.upper.localToWorld(new THREE.Vector3(0,-.195,0)).distanceTo(point(arm.elbow)),arm.lower.localToWorld(new THREE.Vector3(0,-.195,0)).distanceTo(point(arm.hand)));
@@ -111,7 +114,7 @@ let browser;
   assert.deepEqual(report.starts.map(s=>s.combo),expected);assert(report.starts.every(s=>s.charge===(charged?1:0)));
   assert.deepEqual(report.hits.map(s=>s.combo),expected);assert(report.hits.every(s=>s.damage>0));
   assert.equal(report.infinite,false);assert.equal(report.damage,report.initialTargetLP-report.targetLP);assert(report.tension>=0&&report.tension<100);
-  assert(report.minFoot>=-.00001&&report.maxFK<1e-6&&report.maxGrip<1e-6&&report.maxPlantedDrift<1e-6);
+  assert(report.plantedSamples>0&&report.minFoot>=-.00001&&report.maxFK<1e-6&&report.maxGrip<1e-6&&report.maxPlantedDrift<1e-6);
   for(const view of views){
    const directory=path.join(output,view);fs.mkdirSync(directory,{recursive:true});
    for(let i=0;i<report.frameCount;i++){
